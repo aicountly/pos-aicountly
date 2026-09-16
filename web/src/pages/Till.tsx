@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { CreditCard, Loader2, Lock, Pause, Play, Search, Trash2, Wallet, X } from 'lucide-react'
 import { usePos } from '../context/PosContext'
 import { api, ApiError } from '../services/api'
@@ -206,6 +207,28 @@ export default function Till() {
   // ------------------------------------------------------------------
 
   if (!terminalId) {
+    // Two different situations, and telling them apart matters. "Pick a till"
+    // is useless advice when there is no till to pick and the header's picker
+    // has therefore rendered nothing — that is a dead end with no way forward
+    // on the screen, which is exactly what a freshly set-up company sees.
+    const noTillsExist = (posSession?.terminals.length ?? 0) === 0
+
+    if (noTillsExist) {
+      return (
+        <Notice tone="info" title="No till has been set up yet">
+          A till is the counter this browser is standing at — the drawer, the shift and the receipts are all recorded
+          against one, so selling cannot start until there is one.{' '}
+          {can('terminal.manage') ? (
+            <>
+              Create an outlet and its first till in <Link to="/setup">Setup</Link>.
+            </>
+          ) : (
+            <>Ask whoever administers POS to add one in Setup.</>
+          )}
+        </Notice>
+      )
+    }
+
     return (
       <Notice tone="info" title="Which till is this?">
         Choose the till at the top of the page. Everything a till does — the drawer, the shift, the receipts — is

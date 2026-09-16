@@ -74,7 +74,21 @@ $n = count($seen) + 1;
 
 // --- Manage ---------------------------------------------------------------
 if (str_contains($path, '/companyinfo')) {
-    echo json_encode(['data' => ['cmp_id' => (int) ($_GET['comp_id'] ?? 0), 'cmp_name' => 'Stub Trading Co']]);
+    // `ownership` is the field that decides whether the caller owns this
+    // company, and it is the only place POS can learn it — the portal's
+    // validatesession is handed no company and cannot say. A control file lets
+    // a test switch the caller between owner and delegated.
+    $ownership = 'owner';
+    $control = @file_get_contents(sys_get_temp_dir() . '/stub-ownership.txt');
+    if (is_string($control) && trim($control) !== '') {
+        $ownership = trim($control);
+    }
+
+    echo json_encode(['data' => [
+        'cmp_id'    => (int) ($_GET['comp_id'] ?? 0),
+        'cmp_name'  => 'Stub Trading Co',
+        'ownership' => $ownership,
+    ]]);
     exit;
 }
 

@@ -175,6 +175,49 @@ function dashboardWindow(Context $ctx, Auth $auth, array $query = []): Window
     }
 }
 
+/**
+ * A signed-in human the portal reported no acs_type for.
+ *
+ * This is what every real user looks like: `validatesession` is handed a
+ * session key and no company, so it cannot say whether this person owns the
+ * company they are opening. Only Manage knows that.
+ */
+function unknownAuth(string $uuid = 'user-unknown'): Auth
+{
+    $r = new \ReflectionClass(Auth::class);
+    $auth = $r->newInstanceWithoutConstructor();
+    foreach ([
+        'uuid'      => $uuid,
+        'kind'      => 'user',
+        'sourceApp' => 'pos',
+        'sesKey'    => 'stub-ses-key',
+        'session'   => ['name' => 'Somebody'],
+    ] as $prop => $value) {
+        $p = $r->getProperty($prop);
+        $p->setAccessible(true);
+        $p->setValue($auth, $value);
+    }
+
+    return $auth;
+}
+
+/** What Manage will say the caller is on the company, for the next companyinfo call. */
+function stubOwnership(string $ownership): void
+{
+    file_put_contents(sys_get_temp_dir() . '/stub-ownership.txt', $ownership);
+}
+
+/** Forget Context's memo of who may open what, so a test starts clean. */
+function forgetContextMemo(): void
+{
+    $r = new \ReflectionClass(Context::class);
+    foreach (['verified', 'accessTypes'] as $prop) {
+        $p = $r->getProperty($prop);
+        $p->setAccessible(true);
+        $p->setValue(null, []);
+    }
+}
+
 function resetDatabase(): void
 {
     $tables = [
@@ -193,6 +236,8 @@ function resetDatabase(): void
     // TRUNCATE, not DELETE: the audit table's row-level triggers refuse DELETE,
     // and deliberately do not fire on TRUNCATE so a suite can reset itself.
     Db::connect()->exec('TRUNCATE ' . implode(', ', $tables) . ', pos_audit_log RESTART IDENTITY CASCADE');
+    @unlink(sys_get_temp_dir() . '/stub-ownership.txt');
+    forgetContextMemo();
     @unlink(sys_get_temp_dir() . '/stub-idempotency.json');
     @unlink(sys_get_temp_dir() . '/stub-requests.jsonl');
     @unlink(sys_get_temp_dir() . '/stub-documents.json');
@@ -1062,6 +1107,95 @@ check('the audit log cannot be edited or deleted', function () use ($ctx, $auth)
 // product's data, or a column that caches a master or stores a balance another
 // product owns, these go red and the build stops.
 // ---------------------------------------------------------------------------
+
+echo "\nCompany access\n";
+
+check('a company owner gets their permissions even though the portal never said they were one', function () use ($ctx) {
+    resetDatabase();
+    seedOutlet($ctx);
+    Permissions::seed($ctx);
+    stubOwnership('owner');
+
+    // Exactly what a real sign-in produces: validatesession answered about the
+    // user and said nothing about this company.
+    $owner = unknownAuth('user-real-owner');
+    assertSame(null, $owner->accessType(), 'the portal reported no access type');
+    assertSame([], Permissions::granted($ctx, $owner), 'and so this person has nothing yet');
+
+    // The tenant check runs on every scoped endpoint and already holds Manage's
+    // company row. Reading ownership out of it is what was missing.
+    $ctx->assertAllowed($owner);
+
+    assertSame(1, $owner->accessType(), 'Manage says they own the company');
+    assertSame(Permissions::all(), Permissions::granted($ctx, $owner), 'so they hold every permission');
+    assertTrue(Permissions::allows($ctx, $owner, 'terminal.manage'), 'including the one that reaches Setup');
+    assertTrue(Permissions::allows($ctx, $owner, 'access.manage'), 'and the one that grants roles to everyone else');
+});
+
+check('a delegated user is not promoted, and keeps only what they were assigned', function () use ($ctx) {
+    resetDatabase();
+    seedOutlet($ctx);
+    Permissions::seed($ctx);
+    stubOwnership('shared');
+
+    $user = unknownAuth('user-delegated');
+    $ctx->assertAllowed($user);
+
+    assertSame(0, $user->accessType(), 'Manage says they do not own the company');
+    assertSame([], Permissions::granted($ctx, $user), 'and nobody has given them a role');
+
+    // Give them the cashier role the way an owner would.
+    $profileId = (int) Db::scalar(
+        'SELECT profile_id FROM pos_permission_profiles WHERE cmp_id = :cmp AND profile_code = :code',
+        ['cmp' => $ctx->cmpId, 'code' => 'cashier'],
+    );
+    Db::insert('pos_permission_assignments', [
+        'cmp_id' => $ctx->cmpId, 'user_uuid' => $user->uuid, 'profile_id' => $profileId,
+    ], 'assignment_id');
+
+    $r = new \ReflectionClass(Permissions::class);
+    $p = $r->getProperty('cache');
+    $p->setAccessible(true);
+    $p->setValue(null, []);
+
+    assertTrue(Permissions::allows($ctx, $user, 'sell'), 'a cashier may sell');
+    assertSame(false, Permissions::allows($ctx, $user, 'access.manage'), 'and may not hand out roles');
+});
+
+check('promotion only ever upgrades, so a bad answer from Manage cannot demote an owner', function () use ($ctx) {
+    forgetContextMemo();
+    stubOwnership('shared');
+
+    $owner = ownerAuth();
+    assertSame(1, $owner->accessType(), 'starts as an owner');
+    $ctx->assertAllowed($owner);
+    assertSame(1, $owner->accessType(), 'and is still an owner after Manage said otherwise');
+
+    // An unrecognised shape resolves to null and changes nothing either.
+    forgetContextMemo();
+    stubOwnership('something-new-manage-started-sending');
+    $unknown = unknownAuth('user-unreadable');
+    $ctx->assertAllowed($unknown);
+    assertSame(null, $unknown->accessType(), 'an unreadable answer leaves the session alone');
+});
+
+check('the promotion survives the memo, so the second request of a session gets it too', function () use ($ctx) {
+    forgetContextMemo();
+    stubOwnership('owner');
+
+    // First request warms Context's memo.
+    $first = unknownAuth('user-same-person');
+    $ctx->assertAllowed($first);
+    assertSame(1, $first->accessType(), 'the first request promotes');
+
+    // The next request builds a fresh Auth for the same session and takes the
+    // memo's early return. Before the memo carried the access type, this is
+    // where the promotion silently stopped.
+    $second = unknownAuth('user-same-person');
+    assertSame(null, $second->accessType(), 'a fresh Auth starts unpromoted');
+    $ctx->assertAllowed($second);
+    assertSame(1, $second->accessType(), 'and is promoted from the memo, with no second call to Manage');
+});
 
 echo "\nDashboards\n";
 

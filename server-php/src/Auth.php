@@ -29,7 +29,7 @@ final class Auth
         public readonly string $kind,      // 'user' | 'service'
         public readonly string $sourceApp,
         private readonly string $sesKey,
-        private readonly ?array $session,
+        private array $session,
     ) {
     }
 
@@ -62,7 +62,7 @@ final class Auth
                 'service',
                 $app,
                 '',
-                null,
+                [],
             );
         }
 
@@ -107,10 +107,51 @@ final class Auth
         return substr(hash('sha256', $this->kind . '|' . $this->uuid . '|' . $this->sesKey), 0, 32);
     }
 
-    /** Portal access type for the company when the portal reported one: 1 = owner. */
+    /**
+     * Access type for the company being opened: 1 = owner, 0 = delegated.
+     *
+     * WHERE THIS COMES FROM, because it is not obvious and getting it wrong
+     * locked every user out of this product.
+     *
+     * `acs_type` is a COMPANY MEMBERSHIP fact — whether *this* person owns
+     * *that* company. The portal's `validatesession` cannot know it: it is
+     * handed a session key and no company, so it answers about the user and
+     * nothing else. Manage is what knows, and it says so on the company row.
+     *
+     * So this reads whatever the portal happened to send, and Context promotes
+     * it from Manage's answer on the request that names a company. Before that
+     * promotion existed this method returned null for every human being alive,
+     * the `accessType() === 1` owner branch in Permissions::granted() never
+     * ran, and a company owner signing in for the first time got an empty
+     * permission list, an empty navigation and no way to reach the screen that
+     * would have granted them one.
+     */
     public function accessType(): ?int
     {
         return isset($this->session['acs_type']) ? (int) $this->session['acs_type'] : null;
+    }
+
+    /**
+     * Record what Manage says this person is on this company.
+     *
+     * UPGRADES ONLY. A promotion may turn an unknown into an owner; it may
+     * never turn an owner into anything else. Manage being unreachable, or
+     * answering in a shape this code does not recognise, has to leave the
+     * session exactly as it was — the alternative is a bad minute at Manage
+     * silently demoting an owner mid-session.
+     *
+     * Returns whether anything actually changed, so the caller can drop a
+     * permission list that was worked out before the promotion.
+     */
+    public function promoteAccessType(?int $acsType): bool
+    {
+        if ($acsType === null || $this->accessType() === 1 || $this->accessType() === $acsType) {
+            return false;
+        }
+
+        $this->session['acs_type'] = $acsType;
+
+        return true;
     }
 
     public function displayName(): string

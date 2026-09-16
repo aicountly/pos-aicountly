@@ -23,6 +23,18 @@ final class Context
     /** @var array<string, bool> */
     private static array $verified = [];
 
+    /**
+     * What Manage said this session is on this company, per verified key.
+     *
+     * Kept beside $verified rather than inside it because the memo has to keep
+     * working for the SECOND caller too: assertAllowed() returns early on a
+     * memo hit, and without this the promotion would happen once and then
+     * silently stop for every later Auth object in the same request.
+     *
+     * @var array<string, int|null>
+     */
+    private static array $accessTypes = [];
+
     private function __construct(
         public readonly int $cmpId,
         public readonly int $fyId,
@@ -64,6 +76,10 @@ final class Context
 
         $key = $this->cmpId . ':' . $auth->fingerprint();
         if (isset(self::$verified[$key])) {
+            if ($auth->promoteAccessType(self::$accessTypes[$key] ?? null)) {
+                Permissions::forget($this, $auth);
+            }
+
             return;
         }
 
@@ -84,6 +100,53 @@ final class Context
         }
 
         self::$verified[$key] = true;
+
+        // The company row is already in hand, so learning whether this person
+        // owns the company costs nothing extra. Doing it here rather than in a
+        // separate lookup is the whole point: this check already runs on every
+        // scoped endpoint, and a second call to Manage for the same row would
+        // put it in the hot path of every screen twice.
+        self::$accessTypes[$key] = self::resolveAcsType($company);
+        if ($auth->promoteAccessType(self::$accessTypes[$key])) {
+            Permissions::forget($this, $auth);
+        }
+    }
+
+    /**
+     * Read the company-access type out of a Manage company row.
+     *
+     * Mirrors `web/src/company/manageShapes.ts` exactly — explicit `acs_type`
+     * wins, then the `ownership` label, then `is_creator` — because the browser
+     * and the API disagreeing about who owns a company is a bug nobody would
+     * find quickly. Manage has answered in several shapes over the years and
+     * this has to read all of them.
+     *
+     * @param array<string, mixed> $company
+     */
+    private static function resolveAcsType(array $company): ?int
+    {
+        $raw = $company['acs_type'] ?? null;
+        if (is_numeric($raw)) {
+            $acs = (int) $raw;
+            if ($acs === 0 || $acs === 1) {
+                return $acs;
+            }
+        }
+
+        $ownership = strtolower(trim((string) ($company['ownership'] ?? '')));
+        if ($ownership === 'owner') {
+            return 1;
+        }
+        if (in_array($ownership, ['shared', 'delegated', 'user', 'viewer', 'editor', 'member'], true)) {
+            return 0;
+        }
+
+        $creator = $company['is_creator'] ?? null;
+        if ($creator === true || $creator === 1 || $creator === '1' || $creator === 'true' || $creator === 'yes') {
+            return 1;
+        }
+
+        return null;
     }
 
     /** @return array{cmp_id:int, fy_id:int, bo_id:int} */

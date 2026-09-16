@@ -177,6 +177,21 @@ final class Permissions
         return self::$cache[$key] = array_keys($granted);
     }
 
+    /**
+     * Drop the memoised grant for one caller.
+     *
+     * Needed because the grant is worked out once per request and an access-type
+     * promotion can arrive after that. Without this, anything that asked what a
+     * user may do BEFORE Manage confirmed they own the company would pin the
+     * empty answer for the rest of the request — and the correctness of the
+     * whole permission system would rest on nobody ever reordering two lines in
+     * Controller::enter().
+     */
+    public static function forget(Context $ctx, Auth $auth): void
+    {
+        unset(self::$cache[$ctx->cmpId . ':' . $auth->uuid]);
+    }
+
     /** @return list<string> */
     public static function all(): array
     {
