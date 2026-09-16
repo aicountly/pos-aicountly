@@ -139,8 +139,22 @@ final class Routes
         $router->get('v1/role-assignments', [AdminController::class, 'assignments']);
         $router->post('v1/role-assignments', [AdminController::class, 'assignProfile']);
 
-        // The manager's view.
+        // The manager's view. `v1/dashboard` is the original single-day summary
+        // and stays where it is; the five boards below are the product's
+        // dashboards and each enforces its own permission.
         $router->get('v1/dashboard', [DashboardController::class, 'today']);
         $router->get('v1/dashboard/exceptions', [DashboardController::class, 'exceptions']);
+
+        $router->get('v1/dashboards/overview', [DashboardController::class, 'overview']);
+        $router->get('v1/dashboards/retail', [DashboardController::class, 'retail']);
+        $router->get('v1/dashboards/restaurant', [DashboardController::class, 'restaurant']);
+        $router->get('v1/dashboards/customers', [DashboardController::class, 'customers']);
+        $router->get('v1/dashboards/controls', [DashboardController::class, 'controls']);
+
+        // Drill-downs the boards link into. Paged server-side — a dashboard
+        // that downloads the transaction history to count it is a dashboard
+        // that stops working in the second month of trading.
+        $router->get('v1/cash-movements', [DashboardController::class, 'cashMovements']);
+        $router->get('v1/audit-log', [DashboardController::class, 'auditLog']);
     }
 }

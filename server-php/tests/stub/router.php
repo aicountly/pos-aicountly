@@ -109,6 +109,15 @@ if (str_contains($path, '/v1/valuation/unit-costs')) {
     echo json_encode(['data' => array_map(static fn ($id) => ['item_id' => (int) $id, 'unit_cost' => 80.0], $ids)]);
     exit;
 }
+// Inventory's replenishment report, for the Retail board's stock panel. Two
+// items below their reorder level, which is what "needs attention" looks like.
+if (str_contains($path, '/v1/reports/replenishment')) {
+    echo json_encode(['data' => [
+        ['item_id' => 101, 'item_name' => 'Classic Cola 500ml', 'available_qty' => 4.0, 'reorder_level' => 24.0, 'warehouse_id' => 3],
+        ['item_id' => 102, 'item_name' => 'Whole Wheat Bread',  'available_qty' => 1.0, 'reorder_level' => 12.0, 'warehouse_id' => 3],
+    ]]);
+    exit;
+}
 if (str_contains($path, '/v1/availability/check')) {
     echo json_encode(['data' => array_map(static fn ($l) => [
         'item_id' => $l['item_id'], 'available' => 500.0, 'shortfall' => 0.0, 'ok' => true,

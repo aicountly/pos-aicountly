@@ -10,9 +10,29 @@ with a small PHP API alongside it. Both halves deploy to cPanel.
 
 ## What this app does today
 
-Login → Dashboard. The dashboard shows a welcome message and a **Log out**
-button, and nothing else. No navigation, no modules, no placeholder cards —
-those arrive with the product.
+A working point of sale: retail checkout, restaurant tables and kitchen tickets,
+counter returns, shifts and the cash drawer — and **five dashboards** over the
+top of them.
+
+| Board | Route |
+|---|---|
+| Business Overview | `/overview` |
+| Retail Operations | `/retail` |
+| Restaurant Operations | `/restaurant` |
+| Customers & Growth | `/customers` |
+| Cash, Shifts & Controls | `/controls` |
+
+Which boards a person sees depends on two things: what their POS role permits,
+and what kind of shop the outlet is (`pos_mode`) — a retail-only outlet has no
+Restaurant tab rather than an empty one. Every endpoint enforces its own
+permission, so hiding a tab is presentation and nothing more.
+
+The boards are careful about what they claim. There is no provider-confirmed
+tender total, no device connection status, no loyalty balance and no AI
+suggestion, because POS has none of those to report; each renders as an explicit
+*unavailable* state that looks different from an empty one. See
+[docs/DASHBOARDS.md](docs/DASHBOARDS.md) for the metric definitions, the expected
+cash formula and the exact contract gaps.
 
 Signing in is the AICOUNTLY portal's job, the same as every other AICOUNTLY
 SaaS: the app redirects to the portal, the portal returns an `auth_token`, and
@@ -25,9 +45,26 @@ See [docs/auth/AICOUNTLY_AUTH_WORKFLOW.md](docs/auth/AICOUNTLY_AUTH_WORKFLOW.md)
 
 ```
 web/          React app (Vite). Builds to web/dist, deployed to the document root.
+  src/dashboards/   the .pos-* design system, shared shell, charts and filters
+  src/pages/        the operational screens, and dashboards/ for the five boards
 server-php/   PHP API. Deployed to the api/ folder inside the document root.
-docs/         deployment and auth notes
+  src/Domain/Dashboards/   one board service per dashboard, plus the shared
+                           filter window and the tender-state rules
+docs/         architecture, dashboards, deployment and auth notes
 ```
+
+## Tests
+
+```bash
+server-php/tests/run.sh      # needs php with pdo_pgsql and a reachable PostgreSQL
+```
+
+Integration tests against a real PostgreSQL and a stub standing in for Books and
+Inventory — the actual SQL, the actual HTTP client, the actual idempotency
+behaviour. The last section is release-blocking: it reads `information_schema`
+and fails if a mirror table, a cached remote master or a stored balance appears.
+
+`cd web && npm run build` type-checks and builds the front end.
 
 ## Getting started
 

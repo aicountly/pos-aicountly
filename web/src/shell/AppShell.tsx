@@ -1,16 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
+  BarChart3,
   ChefHat,
   CloudOff,
-  LayoutDashboard,
+  Coins,
   LogOut,
-  Monitor,
+  Menu,
   RotateCcw,
   ScanLine,
   Settings as SettingsIcon,
+  ShoppingCart,
+  Store,
   Table2,
   UploadCloud,
+  Users,
+  UtensilsCrossed,
+  Wifi,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthProvider'
 import { AppLauncher } from '../components/AppLauncher'
@@ -19,16 +25,77 @@ import { outboxPending } from '../offline/db'
 import { drainOutbox, onReconnect } from '../offline/sync'
 import { CompanyPicker } from './CompanyPicker'
 import { TerminalPicker } from './TerminalPicker'
+import './shell.css'
 
-const NAV = [
-  { to: '/', label: 'Till', icon: ScanLine, exact: true, permission: 'sell' },
-  { to: '/floor', label: 'Floor', icon: Table2, permission: 'table.open' },
-  { to: '/kitchen', label: 'Kitchen', icon: ChefHat, permission: 'kds.operate' },
-  { to: '/returns', label: 'Returns', icon: RotateCcw, permission: 'return.create' },
-  { to: '/offline', label: 'Offline queue', icon: CloudOff, permission: 'reports.view' },
-  { to: '/reports', label: 'Reports', icon: LayoutDashboard, permission: 'reports.view' },
-  { to: '/setup', label: 'Setup', icon: SettingsIcon, permission: 'terminal.manage' },
-] as const
+/**
+ * The left navigation, in two groups.
+ *
+ * `permissions` is ANY-of, matching the backend: a cashier without reports.view
+ * still opens Retail Operations, and the endpoint scopes them to their own till
+ * rather than the UI showing them a board the server would refuse.
+ *
+ * `modes` is the outlet kind. A retail-only shop has no tables and no kitchen,
+ * so those entries are absent rather than present and empty — and a
+ * restaurant-only outlet does not carry a Retail Operations link it has no use
+ * for. Hiding is presentation only; the API decides.
+ */
+type OutletMode = 'retail' | 'restaurant' | 'quick_service' | 'hybrid'
+
+interface NavEntry {
+  to: string
+  label: string
+  icon: typeof ScanLine
+  exact?: boolean
+  permissions: string[]
+  modes?: OutletMode[]
+}
+
+const DASHBOARD_NAV: NavEntry[] = [
+  { to: '/overview', label: 'Business Overview', icon: BarChart3, permissions: ['reports.view'] },
+  {
+    to: '/retail',
+    label: 'Retail Operations',
+    icon: Store,
+    permissions: ['reports.view', 'sell'],
+    modes: ['retail', 'quick_service', 'hybrid'],
+  },
+  {
+    to: '/restaurant',
+    label: 'Restaurant Operations',
+    icon: UtensilsCrossed,
+    permissions: ['reports.view', 'table.open', 'kds.operate'],
+    modes: ['restaurant', 'quick_service', 'hybrid'],
+  },
+  { to: '/customers', label: 'Customers & Growth', icon: Users, permissions: ['reports.view'] },
+  {
+    to: '/controls',
+    label: 'Cash, Shifts & Controls',
+    icon: Coins,
+    permissions: ['reports.view', 'shift.close', 'shift.open'],
+  },
+]
+
+const WORK_NAV: NavEntry[] = [
+  { to: '/', label: 'Till', icon: ScanLine, exact: true, permissions: ['sell'] },
+  {
+    to: '/floor',
+    label: 'Floor',
+    icon: Table2,
+    permissions: ['table.open'],
+    modes: ['restaurant', 'quick_service', 'hybrid'],
+  },
+  {
+    to: '/kitchen',
+    label: 'Kitchen',
+    icon: ChefHat,
+    permissions: ['kds.operate'],
+    modes: ['restaurant', 'quick_service', 'hybrid'],
+  },
+  { to: '/returns', label: 'Returns', icon: RotateCcw, permissions: ['return.create'] },
+  { to: '/offline', label: 'Offline queue', icon: CloudOff, permissions: ['reports.view', 'offline.resolve'] },
+  { to: '/reports', label: 'Shift report', icon: ShoppingCart, permissions: ['reports.view'] },
+  { to: '/setup', label: 'Setup', icon: SettingsIcon, permissions: ['terminal.manage'] },
+]
 
 /**
  * The connection indicator.
@@ -79,44 +146,23 @@ function ConnectionState() {
   }, [refresh, sync])
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+    <div className="shell-connection">
       <span
+        className={online ? 'shell-pill shell-pill--ok' : 'shell-pill shell-pill--warn'}
         title={note ?? undefined}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.35rem',
-          padding: '0.2rem 0.5rem',
-          borderRadius: '999px',
-          fontSize: '0.78rem',
-          fontWeight: 600,
-          background: online ? 'var(--ok-bg, #052e16)' : 'var(--warn-bg, #451a03)',
-          color: online ? 'var(--ok-fg, #4ade80)' : 'var(--warn-fg, #fbbf24)',
-        }}
+        role="status"
       >
-        {online ? <Monitor size={13} aria-hidden /> : <CloudOff size={13} aria-hidden />}
-        {online ? 'Online' : 'Offline — still selling'}
+        {online ? <Wifi size={13} aria-hidden /> : <CloudOff size={13} aria-hidden />}
+        {online ? 'Online' : 'Offline — finalising is unavailable'}
       </span>
 
       {queued > 0 && (
         <button
           type="button"
+          className="shell-pill shell-pill--action"
           onClick={() => void sync()}
           disabled={syncing || !online}
           title={online ? 'Send these up now' : 'Waiting for the connection'}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            padding: '0.2rem 0.5rem',
-            borderRadius: '999px',
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            border: '1px solid var(--border-strong)',
-            background: 'transparent',
-            color: 'var(--muted)',
-            cursor: online && !syncing ? 'pointer' : 'default',
-          }}
         >
           <UploadCloud size={13} aria-hidden />
           {syncing ? 'Sending…' : `${queued} to send`}
@@ -126,109 +172,117 @@ function ConnectionState() {
   )
 }
 
+function NavGroup({
+  label,
+  entries,
+  onNavigate,
+}: {
+  label: string
+  entries: NavEntry[]
+  onNavigate: () => void
+}) {
+  if (entries.length === 0) return null
+
+  return (
+    <div className="shell-navgroup">
+      <p className="shell-navgroup__label">{label}</p>
+      {entries.map((entry) => {
+        const Icon = entry.icon
+
+        return (
+          <NavLink
+            key={entry.to}
+            to={entry.to}
+            end={entry.exact ?? false}
+            className={({ isActive }) => (isActive ? 'shell-nav__item shell-nav__item--active' : 'shell-nav__item')}
+            onClick={onNavigate}
+          >
+            <Icon size={16} aria-hidden />
+            <span>{entry.label}</span>
+          </NavLink>
+        )
+      })}
+    </div>
+  )
+}
+
 export function AppShell() {
   const { signOut } = useAuth()
   const { session, can, scope } = usePos()
+  const [navOpen, setNavOpen] = useState(false)
+
+  const modes = useMemo(
+    () => new Set((session?.locations ?? []).map((location) => location.pos_mode as OutletMode)),
+    [session],
+  )
+
+  const visible = useCallback(
+    (entries: NavEntry[]) =>
+      entries.filter((entry) => {
+        if (!entry.permissions.some((permission) => can(permission))) return false
+        if (!entry.modes) return true
+        // A company with no outlets configured yet sees everything, or a new
+        // shop has nowhere to start.
+        if (modes.size === 0) return true
+
+        return entry.modes.some((mode) => modes.has(mode))
+      }),
+    [can, modes],
+  )
+
+  const closeNav = useCallback(() => setNavOpen(false), [])
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <aside
-        style={{
-          width: 'var(--sidebar-w)',
-          flexShrink: 0,
-          borderRight: '1px solid var(--border)',
-          background: 'var(--surface-2)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <div style={{ padding: '1rem', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.01em' }}>AICOUNTLY</div>
-          <div style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>POS</div>
+    <div className="shell">
+      <aside className={navOpen ? 'shell-sidebar shell-sidebar--open' : 'shell-sidebar'}>
+        <div className="shell-brand">
+          {/* The approved POS mark, shipped with the app. Not redrawn. */}
+          <img src="/apps/pos.png" alt="" width={28} height={28} aria-hidden />
+          <span>
+            <strong>Aicountly</strong>
+            <span>POS</span>
+          </span>
         </div>
 
-        <nav style={{ padding: '0.5rem', flex: 1, overflowY: 'auto' }}>
-          {NAV.filter((entry) => !('permission' in entry) || can(entry.permission as string)).map((entry) => {
-            const Icon = entry.icon
-            return (
-              <NavLink
-                key={entry.to}
-                to={entry.to}
-                end={'exact' in entry ? entry.exact : false}
-                style={({ isActive }) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.6rem',
-                  padding: '0.5rem 0.65rem',
-                  marginBottom: '0.15rem',
-                  borderRadius: 'var(--radius-sm)',
-                  color: isActive ? 'var(--fg)' : 'var(--muted)',
-                  background: isActive ? 'var(--surface)' : 'transparent',
-                  fontWeight: isActive ? 600 : 400,
-                  textDecoration: 'none',
-                })}
-              >
-                <Icon size={16} aria-hidden />
-                {entry.label}
-              </NavLink>
-            )
-          })}
+        <nav className="shell-nav" aria-label="Main">
+          <NavGroup label="Dashboards" entries={visible(DASHBOARD_NAV)} onNavigate={closeNav} />
+          <NavGroup label="Work" entries={visible(WORK_NAV)} onNavigate={closeNav} />
         </nav>
 
-        <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border)' }}>
-          <div style={{ fontSize: '0.82rem', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {session?.user.display_name ?? '—'}
-          </div>
-          <button
-            type="button"
-            onClick={signOut}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              width: '100%',
-              padding: '0.4rem 0.5rem',
-              background: 'transparent',
-              border: '1px solid var(--border-strong)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              color: 'var(--muted)',
-            }}
-          >
+        <div className="shell-user">
+          <span className="shell-user__name">{session?.user.display_name ?? '—'}</span>
+          <button type="button" className="shell-signout" onClick={signOut}>
             <LogOut size={14} aria-hidden /> Log out
           </button>
         </div>
       </aside>
 
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <header
-          style={{
-            height: 'var(--header-h)',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 1rem',
-            gap: '1rem',
-            background: 'var(--surface)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+      {navOpen && <button type="button" className="shell-scrim" aria-label="Close the menu" onClick={closeNav} />}
+
+      <div className="shell-main">
+        <header className="shell-header">
+          <div className="shell-header__left">
+            <button
+              type="button"
+              className="shell-menu"
+              onClick={() => setNavOpen((open) => !open)}
+              aria-expanded={navOpen}
+              aria-label={navOpen ? 'Close the menu' : 'Open the menu'}
+            >
+              <Menu size={18} aria-hidden />
+            </button>
             <CompanyPicker />
             <TerminalPicker />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+          <div className="shell-header__right">
             <ConnectionState />
-            {scope && (
-              <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }} className="num">
-                FY {scope.fy_id}
-              </span>
-            )}
+            {scope && <span className="shell-fy num">FY {scope.fy_id}</span>}
             <AppLauncher />
           </div>
         </header>
 
-        <main style={{ flex: 1, padding: '1.25rem', minWidth: 0, background: 'var(--bg)' }}>
+        <main className="shell-content">
           <Outlet />
         </main>
       </div>

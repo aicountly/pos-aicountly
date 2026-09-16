@@ -164,6 +164,35 @@ other, which took the fleet down once already.
 Two timeout budgets, both with connect bounds: optional reads 2s/6s, required
 writes 3s/20s.
 
+## The five dashboards
+
+Five boards over POS' own rows, each with its own endpoint, its own permission
+check and its own SQL scope. See [DASHBOARDS.md](DASHBOARDS.md) for the full
+contract; the two things worth knowing here are what they refuse to claim, and
+what decides who sees them.
+
+**They refuse to claim four things**, because the obvious thing to draw would be
+a lie: a provider-confirmed tender total (there is no payment provider), a device
+connection status (a browser cannot ask a printer anything), a loyalty balance
+(there is no loyalty module) and an AI suggestion (there is no model
+integration). Each is rendered as an explicit *unavailable* state that looks
+different from an empty one — "there is no loyalty scheme" and "no customer has
+any points" must not render identically.
+
+**Visibility is two questions.** Permissions decide what a person may do;
+`pos_location_profiles.pos_mode` decides what kind of shop this is, so a
+retail-only outlet has no Restaurant tab rather than an empty one. Hiding a tab
+is presentation — every endpoint asserts its own permission, and a cashier
+without `reports.view` who opens Retail or Controls gets their own tills and
+their own shifts, narrowed in SQL rather than by a panel the UI left out.
+
+**The business date is the outlet's, not the server's.** Migration 004 adds
+`trading_timezone` and `day_start_minutes` to the outlet. A bar that closes at
+2am takes money on Friday night that lands on Saturday in UTC, and every sales
+figure is wrong by one night's takings until the day boundary is the shop's own.
+These are POS' operating configuration for its own counter day — the same kind of
+thing as `service_charge_pc` beside them — not a copy of any Manage master.
+
 ## Permissions
 
 Six shipped roles — cashier, waiter, captain, kitchen, manager, pos_admin —
@@ -202,9 +231,14 @@ server-php/
     Domain/                NumberSeries, RegisterService, CartService,
                            CheckoutService, KotService, TableService,
                            MenuService, ReturnService
+    Domain/Dashboards/     Window (filters, business date, tenant scope),
+                           Tenders (what a tender proves), and one board per
+                           dashboard: Overview, Retail, Restaurant, Customers,
+                           Controls
     Controllers/           Till, Restaurant, Returns, Catalog, Admin,
                            Settings, Dashboard
   database/migrations/     001 terminals · 002 restaurant · 003 integration
+                           · 004 dashboards (trading day, targets, read indexes)
   tests/
     integration.php        46 tests, incl. the release-blocking ownership suite
     run.sh                 real PostgreSQL + a stub for Books and Inventory
@@ -218,6 +252,19 @@ web/src/
   pages/                   Till, Floor, Kitchen, Returns, OfflineQueue,
                            Reports, Setup
 ```
+
+## Charts, without a chart library
+
+The dashboards draw their own SVG. Every candidate library is 50-150 kB on a till
+that is often a cheap tablet on shop broadband, and four chart shapes are needed
+across five boards — each about twenty lines of path arithmetic. The trade
+favours the arithmetic.
+
+The accessibility consequence is handled rather than ignored: an SVG is invisible
+to a screen reader and unreadable to someone who cannot separate the series
+colours, so **every chart renders the same numbers as a real `<table>`**,
+present in the accessibility tree always and visible where it helps. The picture
+is the summary; the table is the data.
 
 ## Running the tests
 

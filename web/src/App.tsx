@@ -10,10 +10,16 @@ import Kitchen from './pages/Kitchen'
 import OfflineQueue from './pages/OfflineQueue'
 import Reports from './pages/Reports'
 import Setup from './pages/Setup'
+import Overview from './pages/dashboards/Overview'
+import Retail from './pages/dashboards/Retail'
+import Restaurant from './pages/dashboards/Restaurant'
+import Customers from './pages/dashboards/Customers'
+import Controls from './pages/dashboards/Controls'
 import { ReturnDetail, ReturnsList } from './pages/Returns'
 import { Notice } from './ui'
 import { initAnalytics, trackPageView } from './utils/analytics'
 import './App.css'
+import './dashboards/styles.css'
 
 initAnalytics()
 
@@ -76,6 +82,16 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<RequireScope><Till /></RequireScope>} />
+
+            {/* The five dashboards. Each endpoint asserts its own permission, so
+                a URL typed by someone who may not see it answers 403 rather than
+                rendering an empty shell. */}
+            <Route path="overview" element={<RequireScope><Overview /></RequireScope>} />
+            <Route path="retail" element={<RequireScope><Retail /></RequireScope>} />
+            <Route path="restaurant" element={<RequireScope><Restaurant /></RequireScope>} />
+            <Route path="customers" element={<RequireScope><Customers /></RequireScope>} />
+            <Route path="controls" element={<RequireScope><Controls /></RequireScope>} />
+
             <Route path="floor" element={<RequireScope><Floor /></RequireScope>} />
             <Route path="kitchen" element={<RequireScope><Kitchen /></RequireScope>} />
             <Route path="returns">

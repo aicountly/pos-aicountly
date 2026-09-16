@@ -1,0 +1,803 @@
+/**
+ * The dashboard design system, scoped to .pos-workspace.
+ *
+ * Everything here is inside that one class so it cannot leak onto the till, the
+ * kitchen screen or the floor plan — screens with their own layout needs that
+ * happen to share the theme tokens in index.css.
+ *
+ * Three rules hold throughout:
+ *   • No meaning is carried by colour alone. Every badge has words in it and
+ *     every chart has a table underneath.
+ *   • Anything a finger presses is at least 44px tall.
+ *   • Nothing animates for a viewer who asked it not to.
+ */
+
+.pos-workspace {
+  --pos-brand: var(--brand, #25b003);
+  --pos-action: var(--accent, #177d08);
+  --pos-action-hover: var(--accent-hover, #116006);
+  --pos-bg: var(--bg, #f5f7f6);
+  --pos-surface: var(--surface, #ffffff);
+  --pos-text: var(--fg, #17251d);
+  --pos-muted: var(--muted, #5e6e64);
+  --pos-border: var(--border, #dfe7e1);
+  --pos-soft-green: var(--brand-soft, #edf8e9);
+  --pos-radius: 18px;
+  --pos-shadow: var(--shadow, 0 5px 20px rgba(24, 50, 31, 0.045));
+
+  min-width: 0;
+  min-height: 100%;
+  padding: clamp(16px, 2vw, 30px);
+  color: var(--pos-text);
+  background: var(--pos-bg);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.pos-workspace *,
+.pos-workspace *::before,
+.pos-workspace *::after {
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Page header and controls
+   -------------------------------------------------------------------------- */
+
+.pos-page-header,
+.pos-panel__header,
+.pos-filterbar,
+.pos-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pos-page-header {
+  margin-bottom: 20px;
+  align-items: flex-start;
+}
+
+.pos-eyebrow {
+  margin: 0 0 7px;
+  color: var(--pos-action);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.pos-workspace h1 {
+  margin: 0;
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.18;
+  letter-spacing: -0.035em;
+}
+
+.pos-workspace h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.pos-workspace h3 {
+  margin: 12px 0 8px;
+  font-size: 15px;
+}
+
+.pos-description,
+.pos-muted {
+  color: var(--pos-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pos-description { margin: 9px 0 0; }
+.pos-panel__header p { margin: 5px 0 0; }
+
+.pos-actions,
+.pos-filterbar__controls,
+.pos-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pos-context { margin-bottom: 16px; }
+
+.pos-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--pos-border);
+  border-radius: 11px;
+  background: white;
+  color: var(--pos-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pos-button--primary {
+  background: var(--pos-action);
+  border-color: var(--pos-action);
+  color: white;
+}
+
+.pos-button--primary:hover:not(:disabled) { background: var(--pos-action-hover); }
+.pos-button--secondary { background: var(--pos-surface); }
+
+.pos-button--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--pos-action);
+  padding-inline: 8px;
+}
+
+.pos-button--quiet:hover:not(:disabled) { background: var(--pos-soft-green); }
+
+.pos-button--small {
+  min-height: 36px;
+  padding: 6px 11px;
+  font-size: 12px;
+}
+
+/*
+ * On a touch screen every target is a finger target.
+ *
+ * 36px is comfortable under a mouse and too small under a thumb, so the small
+ * variant grows on a coarse pointer rather than being small everywhere or large
+ * everywhere.
+ */
+@media (pointer: coarse) {
+  .pos-button--small {
+    min-height: 44px;
+    padding-inline: 14px;
+  }
+}
+
+.pos-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pos-workspace :focus-visible {
+  outline: 3px solid var(--pos-action);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Dashboard switcher and filters
+   -------------------------------------------------------------------------- */
+
+.pos-dashboard-nav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px;
+  margin-bottom: 16px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+}
+
+.pos-dashboard-nav__item {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--pos-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.pos-dashboard-nav__item[aria-current='page'] {
+  background: var(--pos-soft-green);
+  color: var(--pos-action);
+  box-shadow: inset 0 0 0 1px var(--brand-line, #cfe7c6);
+}
+
+.pos-filterbar {
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.pos-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pos-field > span {
+  color: var(--pos-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pos-workspace select,
+.pos-workspace input {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: white;
+  color: var(--pos-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+/* --------------------------------------------------------------------------
+   Metric cards
+   -------------------------------------------------------------------------- */
+
+.pos-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.pos-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  background: var(--pos-surface);
+  box-shadow: var(--pos-shadow);
+  text-align: left;
+  font: inherit;
+  color: var(--pos-text);
+  /* It is a card, not a sentence with a link in it. */
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.pos-metric:hover:not(:disabled) {
+  border-color: #a5ce98;
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+}
+
+.pos-metric:disabled { cursor: default; }
+
+.pos-metric__label {
+  color: var(--pos-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.pos-metric__value {
+  font-size: clamp(23px, 2vw, 30px);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  /* break-word, never `anywhere`: `anywhere` splits ₹4,382.40 across two lines
+     mid-number, which reads as two figures. */
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.pos-metric__comparison {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--pos-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Direction is stated in words by the component; the colour only reinforces. */
+.pos-metric__comparison--up { color: var(--success, #216f13); }
+.pos-metric__comparison--down { color: var(--danger, #aa2929); }
+
+/* --------------------------------------------------------------------------
+   Layout and panels
+   -------------------------------------------------------------------------- */
+
+/*
+ * `minmax(0, 1fr)`, not the default `auto`.
+ *
+ * A grid item's automatic minimum size is min-content, so a single implicit
+ * `auto` column grows to fit its widest child — a wide table pushes the track
+ * past the viewport and the WHOLE PAGE scrolls sideways, which is exactly what
+ * the .pos-table-wrap scroller exists to prevent. Every grid in this file
+ * therefore states a 0 minimum. This is the single most common way a
+ * responsive dashboard breaks on a phone.
+ */
+.pos-dashboard-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+}
+
+/*
+ * `align-items: start`, not the default stretch.
+ *
+ * Stretch makes both panels in a row as tall as the taller one, which on a quiet
+ * day leaves a chart panel with several hundred pixels of white under a single
+ * data point. Each panel is its own height instead.
+ */
+.pos-grid-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.pos-grid-equal {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 20px;
+}
+
+.pos-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  background: var(--pos-surface);
+  box-shadow: var(--pos-shadow);
+}
+
+.pos-panel__header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #edf1ee;
+  flex-wrap: wrap;
+}
+
+.pos-panel__body {
+  position: relative;
+  padding: 20px;
+  flex: 1;
+  min-width: 0;
+  /* Contain a wide table rather than letting it widen the panel. */
+  max-width: 100%;
+  overflow: clip;
+}
+
+.pos-panel__body--flush { padding: 0; }
+
+/* --------------------------------------------------------------------------
+   Insights
+   -------------------------------------------------------------------------- */
+
+.pos-insight {
+  padding: 16px;
+  border: 1px solid var(--brand-line, #d6e9cf);
+  border-radius: 14px;
+  background: #f7fbf5;
+}
+
+.pos-insight + .pos-insight { margin-top: 12px; }
+.pos-insight h3 { margin: 10px 0 6px; }
+
+.pos-insight p {
+  margin: 0 0 10px;
+  color: var(--pos-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pos-insight--warning { border-color: #f0dfb8; background: #fffbf2; }
+.pos-insight--danger { border-color: #f2cfcf; background: #fff7f7; }
+
+/* --------------------------------------------------------------------------
+   Badges — always with a word in them
+   -------------------------------------------------------------------------- */
+
+.pos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.pos-badge--neutral { background: #eef2ef; color: #526259; }
+.pos-badge--success { background: var(--success-bg, #edf8e9); color: var(--success, #216f13); }
+.pos-badge--warning { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+.pos-badge--danger { background: var(--danger-bg, #ffeded); color: var(--danger, #aa2929); }
+.pos-badge--info { background: var(--info-bg, #edf3ff); color: var(--info, #315dab); }
+
+.pos-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Tables
+   -------------------------------------------------------------------------- */
+
+/*
+ * `position: relative` is load-bearing.
+ *
+ * The visually-hidden spans inside a wide table's headers are absolutely
+ * positioned. Without a positioned ancestor their containing block is the
+ * viewport, so they escape this scroller entirely and push the WHOLE PAGE
+ * sideways by however far into the table they sit — a 9px sideways scroll on a
+ * tablet traced back to one 1px screen-reader label.
+ */
+.pos-table-wrap {
+  position: relative;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.pos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pos-table th {
+  color: var(--pos-muted);
+  background: var(--surface-2, #f8faf8);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pos-table th,
+.pos-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #edf1ee;
+  vertical-align: middle;
+}
+
+.pos-table .is-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-table tbody tr:hover { background: #fafcf9; }
+.pos-table caption {
+  caption-side: top;
+  padding: 0 14px 10px;
+  color: var(--pos-muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+/*
+ * Present to a screen reader, absent to the eye.
+ *
+ * `clip-path` alongside the legacy `clip` because `clip` is deprecated and
+ * ignored by newer engines; both are kept so the element stays hidden either
+ * way. Wherever one of these sits inside a horizontal scroller, that scroller
+ * needs `position: relative` — see .pos-table-wrap.
+ */
+.pos-visually-hidden {
+  position: absolute;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------------------
+   States
+   -------------------------------------------------------------------------- */
+
+.pos-state {
+  padding: 40px 20px;
+  text-align: center;
+  border: 1px dashed var(--pos-border);
+  border-radius: var(--pos-radius);
+  background: white;
+}
+
+.pos-state h2 { margin-bottom: 8px; }
+.pos-state p { color: var(--pos-muted); font-size: 13px; }
+
+.pos-state--inline {
+  padding: 26px 16px;
+  border: 0;
+  background: transparent;
+}
+
+/* An "unavailable" panel is not an empty one, and does not look like one. */
+.pos-unavailable {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #e6e3cf;
+  border-radius: 12px;
+  background: #fdfcf3;
+  color: var(--pos-text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.pos-unavailable--muted { border-color: var(--pos-border); background: var(--surface-2, #fbfcfb); }
+
+/* --------------------------------------------------------------------------
+   Charts
+   -------------------------------------------------------------------------- */
+
+.pos-chart { width: 100%; min-width: 0; }
+/* One figure with an accessible name, not a data series. */
+.pos-chart--figure { max-width: 200px; margin: 0 auto; }
+.pos-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.pos-chart__grid { stroke: #edf1ee; stroke-width: 1; }
+.pos-chart__axis { fill: var(--pos-muted); font-size: 10px; }
+.pos-chart__area { fill: var(--pos-soft-green); }
+.pos-chart__line { fill: none; stroke: var(--pos-brand); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.pos-chart__line--comparison { stroke: #9aa8a0; stroke-width: 2; stroke-dasharray: 5 4; }
+.pos-chart__bar { fill: var(--pos-brand); }
+.pos-chart__bar--muted { fill: #b9d9ad; }
+.pos-chart__point { fill: var(--pos-brand); }
+
+.pos-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  color: var(--pos-muted);
+  font-size: 12px;
+}
+
+.pos-legend__item { display: inline-flex; align-items: center; gap: 6px; }
+.pos-legend__swatch { width: 12px; height: 3px; border-radius: 2px; background: var(--pos-brand); }
+.pos-legend__swatch--comparison { background: repeating-linear-gradient(90deg, #9aa8a0 0 5px, transparent 5px 9px); }
+.pos-legend__swatch--square { width: 11px; height: 11px; border-radius: 3px; }
+
+/* Horizontal bar rows — the share/mix pattern used on four boards. */
+.pos-bars { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+
+.pos-bar__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.pos-bar__track {
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: #eef2ef;
+  overflow: hidden;
+}
+
+.pos-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--pos-brand);
+}
+
+.pos-bar__fill--muted { background: #b9d9ad; }
+.pos-bar__fill--warning { background: #e0a93b; }
+
+/* --------------------------------------------------------------------------
+   Counter cards, tables, kitchen board
+   -------------------------------------------------------------------------- */
+
+.pos-counter-grid,
+.pos-table-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: 12px;
+}
+
+.pos-counter {
+  display: block;
+  text-decoration: none;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pos-counter:hover { border-color: #a5ce98; }
+.pos-counter--busy { border-left: 4px solid var(--warning, #805500); }
+.pos-counter--open { border-left: 4px solid var(--pos-brand); }
+.pos-counter--closed { border-left: 4px solid var(--pos-border); background: var(--surface-2, #fbfcfb); }
+
+.pos-counter__title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pos-counter__name { font-weight: 700; font-size: 14px; }
+.pos-counter__figures { display: flex; gap: 16px; margin-top: 12px; }
+.pos-counter__figure { font-size: 12px; color: var(--pos-muted); }
+.pos-counter__figure strong { display: block; font-size: 16px; color: var(--pos-text); font-variant-numeric: tabular-nums; }
+
+.pos-tablecard {
+  display: flex;
+  flex-direction: column;
+  /* Or the status badge stretches to the card's full width and stops reading
+     as a badge. */
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pos-tablecard:hover { border-color: #a5ce98; }
+
+.pos-tablecard--occupied { border-color: #a5ce98; background: var(--pos-soft-green); }
+.pos-tablecard--billing { border-color: #e6d2a4; background: #fffaf0; }
+.pos-tablecard--cleaning { border-color: #c9d5e6; background: #f5f8fd; }
+.pos-tablecard__code { font-weight: 800; font-size: 15px; }
+.pos-tablecard__meta { color: var(--pos-muted); font-size: 11.5px; line-height: 1.5; }
+
+.pos-kitchen-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(230px, 1fr));
+  gap: 14px;
+  overflow-x: auto;
+}
+
+.pos-kitchen-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface-2, #f8faf8);
+}
+
+.pos-kitchen-column__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pos-muted);
+}
+
+.pos-ticket {
+  padding: 12px;
+  border: 1px solid var(--pos-border);
+  border-radius: 12px;
+  background: var(--pos-surface);
+}
+
+.pos-ticket--overdue { border-color: #e8bcbc; background: #fff8f8; }
+.pos-ticket__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pos-ticket__no { font-weight: 800; font-size: 13px; }
+.pos-ticket__lines { margin: 9px 0 0; padding: 0; list-style: none; font-size: 12.5px; }
+.pos-ticket__lines li { display: flex; gap: 8px; padding: 2px 0; }
+.pos-ticket__qty { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 22px; }
+.pos-ticket__note { color: var(--danger, #aa2929); font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Timeline
+   -------------------------------------------------------------------------- */
+
+.pos-timeline { margin: 0; padding: 0; list-style: none; }
+
+.pos-timeline li {
+  position: relative;
+  padding: 0 0 18px 20px;
+  border-left: 2px solid var(--pos-border);
+}
+
+.pos-timeline li:last-child { border-left-color: transparent; padding-bottom: 0; }
+
+.pos-timeline li::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pos-brand);
+}
+
+.pos-timeline__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 13px; }
+.pos-timeline__action { font-weight: 700; }
+.pos-timeline__detail { margin: 4px 0 0; color: var(--pos-muted); font-size: 12px; overflow-wrap: anywhere; }
+
+/* --------------------------------------------------------------------------
+   Odds and ends
+   -------------------------------------------------------------------------- */
+
+.pos-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.pos-stack--tight { gap: 8px; }
+.pos-split { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; }
+.pos-split strong { font-variant-numeric: tabular-nums; }
+.pos-split--total {
+  padding-top: 10px;
+  border-top: 1px solid var(--pos-border);
+  font-size: 14px;
+}
+.pos-split--emphasis strong { font-size: 18px; }
+
+.pos-workspace a { color: inherit; }
+
+.pos-link {
+  color: var(--pos-action);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pos-link:hover { text-decoration: underline; }
+
+.pos-note {
+  margin: 12px 0 0;
+  color: var(--pos-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .pos-grid-main { grid-template-columns: minmax(0, 1fr); }
+  .pos-kitchen-board { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .pos-page-header { flex-direction: column; }
+  .pos-grid-equal { grid-template-columns: minmax(0, 1fr); }
+  .pos-panel__header,
+  .pos-panel__body { padding: 16px; }
+  .pos-inline { flex-wrap: wrap; }
+  .pos-filterbar__controls { width: 100%; }
+  .pos-field { flex: 1 1 140px; }
+  .pos-actions { width: 100%; }
+  .pos-actions .pos-button { flex: 1 1 auto; }
+  .pos-counter__figures { gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-workspace *,
+  .pos-workspace *::before,
+  .pos-workspace *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -1,25 +1,82 @@
+/**
+ * Aicountly POS — the theme tokens.
+ *
+ * Every variable the application reads is defined here. That was not previously
+ * true: the components referenced --surface, --border-strong, --radius,
+ * --shadow, --sidebar-w and eighteen others that no stylesheet ever declared,
+ * so cards rendered with no background, the sidebar with no width and every
+ * status colour as nothing at all. A `var()` with no fallback and no definition
+ * is not a soft failure — the declaration is dropped.
+ *
+ * THE PALETTE. Aicountly green on white. #25b003 is the brand and is used for
+ * accents, selection and chart marks, where a large block of it reads as the
+ * brand. It is NOT used behind white text: at 14px on white it falls short of
+ * 4.5:1, so --accent (buttons, links, small text) is the darker #177d08 and the
+ * bright green stays decorative. That split is the whole reason there are two
+ * greens rather than one.
+ *
+ * Light only, deliberately. A till stands under shop lighting and is read at
+ * arm's length by someone who did not choose the theme; a colour scheme that
+ * flips with the operating system is a counter that looks different on two
+ * machines side by side.
+ */
+
 :root {
-  --bg: #ffffff;
-  --fg: #18181b;
-  --muted: #71717a;
-  --border: #e4e4e7;
-  --accent: #18181b;
-  --accent-fg: #fafafa;
+  color-scheme: light;
 
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Brand */
+  --brand: #25b003;
+  --brand-soft: #edf8e9;
+  --brand-line: #cfe7c6;
+
+  /* Surfaces */
+  --bg: #f5f7f6;
+  --surface: #ffffff;
+  --surface-2: #fbfcfb;
+
+  /* Text */
+  --fg: #17251d;
+  --muted: #5e6e64;
+
+  /* Lines */
+  --border: #dfe7e1;
+  --border-strong: #c8d5cc;
+
+  /* Action — the readable green, for buttons and small text */
+  --accent: #177d08;
+  --accent-hover: #116006;
+  --accent-fg: #ffffff;
+
+  /* Status. Each pair is a tint and a text colour that passes on it. */
+  --success: #216f13;
+  --success-bg: #edf8e9;
+  --ok-fg: #216f13;
+  --ok-bg: #edf8e9;
+
+  --warning: #805500;
+  --warning-bg: #fff4dc;
+  --warn-fg: #805500;
+  --warn-bg: #fff4dc;
+
+  --danger: #aa2929;
+  --danger-bg: #ffeded;
+  --danger-fg: #aa2929;
+
+  --info: #315dab;
+  --info-bg: #edf3ff;
+
+  /* Shape */
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 5px 20px rgba(24, 50, 31, 0.045);
+  --shadow-lg: 0 8px 24px rgba(24, 50, 31, 0.075);
+
+  /* Chrome */
+  --sidebar-w: 232px;
+  --header-h: 60px;
+
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.6;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #09090b;
-    --fg: #fafafa;
-    --muted: #a1a1aa;
-    --border: #27272a;
-    --accent: #fafafa;
-    --accent-fg: #09090b;
-  }
 }
 
 * {
@@ -32,4 +89,29 @@ body {
   background: var(--bg);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Figures line up in a column when they are tabular. */
+.num,
+.is-number {
+  font-variant-numeric: tabular-nums;
+}
+
+/* One visible focus ring for the whole application, on the brand's action
+   colour. Never `outline: none` — a till is used with a keyboard far more than
+   a marketing site is. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
