@@ -1,33 +1,96 @@
 import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth/AuthProvider'
-import Dashboard from './pages/Dashboard'
+import { PosProvider, usePos } from './context/PosContext'
+import { AppShell } from './shell/AppShell'
 import SignIn from './pages/SignIn'
+import Till from './pages/Till'
+import Floor from './pages/Floor'
+import Kitchen from './pages/Kitchen'
+import OfflineQueue from './pages/OfflineQueue'
+import Reports from './pages/Reports'
+import Setup from './pages/Setup'
+import { ReturnDetail, ReturnsList } from './pages/Returns'
+import { Notice } from './ui'
 import { initAnalytics, trackPageView } from './utils/analytics'
 import './App.css'
 
 initAnalytics()
 
+function PageViews() {
+  const location = useLocation()
+  useEffect(() => {
+    trackPageView(location.pathname, document.title)
+  }, [location.pathname])
+
+  return null
+}
+
 /**
- * Login → Dashboard. There is no router because there are no routes: the portal
- * callback lands on /auth/callback, which the SPA history fallback serves with
- * this same document, and AuthProvider consumes the token at boot.
+ * Nothing renders until a company is chosen.
+ *
+ * Every endpoint in this API is company-scoped, so a screen without a scope
+ * would be a screen full of 400s. Asking once, up front, is kinder than that.
  */
+function RequireScope({ children }: { children: React.ReactNode }) {
+  const { scope, session, loading, error } = usePos()
+
+  if (!scope) {
+    return (
+      <Notice tone="info" title="Choose a company">
+        Pick the company and financial year to work in, using the selector at the top of the page.
+      </Notice>
+    )
+  }
+  if (loading && !session) return <p style={{ color: 'var(--muted)' }}>Opening…</p>
+  if (error) {
+    return (
+      <Notice tone="danger" title="Could not open that company">
+        {error}
+      </Notice>
+    )
+  }
+
+  return <>{children}</>
+}
+
 export default function App() {
   const { status } = useAuth()
 
-  useEffect(() => {
-    if (status === 'authenticated') trackPageView('/dashboard', 'Dashboard')
-    else if (status === 'signed-out') trackPageView('/sign-in', 'Sign in')
-  }, [status])
-
-  if (status === 'authenticated') return <Dashboard />
   if (status === 'signed-out') return <SignIn />
 
+  if (status !== 'authenticated') {
+    return (
+      <main className="screen">
+        <div className="panel">
+          <p className="message">Signing you in…</p>
+        </div>
+      </main>
+    )
+  }
+
   return (
-    <main className="screen">
-      <div className="panel">
-        <p className="message">Signing you in…</p>
-      </div>
-    </main>
+    <PosProvider>
+      <BrowserRouter>
+        <PageViews />
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<RequireScope><Till /></RequireScope>} />
+            <Route path="floor" element={<RequireScope><Floor /></RequireScope>} />
+            <Route path="kitchen" element={<RequireScope><Kitchen /></RequireScope>} />
+            <Route path="returns">
+              <Route index element={<RequireScope><ReturnsList /></RequireScope>} />
+              <Route path=":id" element={<RequireScope><ReturnDetail /></RequireScope>} />
+            </Route>
+            <Route path="offline" element={<RequireScope><OfflineQueue /></RequireScope>} />
+            <Route path="reports" element={<RequireScope><Reports /></RequireScope>} />
+            <Route path="setup" element={<RequireScope><Setup /></RequireScope>} />
+            {/* The portal callback lands here once AuthProvider has consumed the token. */}
+            <Route path="auth/callback" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Notice tone="warning">That page does not exist.</Notice>} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </PosProvider>
   )
 }
