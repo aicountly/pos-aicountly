@@ -36,7 +36,31 @@ export function getManageApiOrigin(sandbox: boolean = isSandboxHost()): string {
 /** Central product icons live behind Console — one origin regardless of sandbox/production. */
 export const CONSOLE_API_PRODUCTION = 'https://console.aicountly.org'
 
+/**
+ * Where the launcher asks for product icons.
+ *
+ * The fleet default is Console, and it is the same origin on sandbox and
+ * production because there is one icon set for both. `VITE_CONSOLE_API_BASE_URL`
+ * overrides it, and setting that variable to `off` (or `none`, or `0`) turns
+ * the remote check off entirely — the grid then paints the tiles bundled with
+ * this build and makes no cross-origin request at all.
+ *
+ * That switch exists because this is the only endpoint in the app that could
+ * not be pointed anywhere. Every other one is configurable, and an installation
+ * that does not run Console had no way to stop the launcher asking for it.
+ */
+const CONFIGURED_CONSOLE_ORIGIN = (import.meta.env.VITE_CONSOLE_API_BASE_URL ?? '').trim()
+const DISABLED_VALUES = ['off', 'none', 'false', '0']
+
+export function consoleIconsEnabled(): boolean {
+  return !DISABLED_VALUES.includes(CONFIGURED_CONSOLE_ORIGIN.toLowerCase())
+}
+
 export function getConsoleApiOrigin(): string {
+  if (CONFIGURED_CONSOLE_ORIGIN && consoleIconsEnabled()) {
+    return CONFIGURED_CONSOLE_ORIGIN.replace(/\/$/, '')
+  }
+
   return CONSOLE_API_PRODUCTION
 }
 
@@ -148,25 +172,118 @@ export function resolveAppIconUrl(
   return buildProductIconUrl(app.id, version)
 }
 
-/** Cache-bust timestamps for launcher tiles (public manifest). */
+/**
+ * Cache-bust timestamps for launcher tiles (public manifest).
+ *
+ * WHEN THIS RUNS MATTERS MORE THAN WHAT IT RETURNS. The manifest only says
+ * whether Console holds a NEWER icon than the one bundled with this build; the
+ * grid paints from the bundle and from the per-browser choice either way, and
+ * `listLauncherApps` will not use a remote icon until both manifests are in
+ * hand. So nothing on screen waits for this, and it is fetched lazily — when
+ * someone opens the launcher, which is also where the fleet integration note
+ * says the pickup happens.
+ *
+ * It used to run on mount instead, which meant one cross-origin request on
+ * every page load of every screen, for data the user had not asked to see. When
+ * Console was unreachable that was a red console error per page load, for ever,
+ * which is how people learn to ignore the console.
+ *
+ * The result is remembered for the session, and a FAILURE is remembered too,
+ * for a shorter while. Retrying a down Console on every grid open produces the
+ * same failure and the same noise; asking again a few minutes later is enough
+ * to pick up an icon change on the day Console comes back.
+ */
+const MANIFEST_TTL_MS = 10 * 60 * 1000
+const MANIFEST_FAILURE_TTL_MS = 5 * 60 * 1000
+
+interface ManifestCache {
+  at: number
+  ok: boolean
+  items: Record<string, string | number>
+}
+
+let manifestCache: ManifestCache | null = null
+let manifestInFlight: Promise<Record<string, string | number>> | null = null
+
+/** Forget the cached manifest. Exists so tests do not leak state into each other. */
+export function resetProductIconManifestCache(): void {
+  manifestCache = null
+  manifestInFlight = null
+}
+
 export async function fetchProductIconManifest(): Promise<Record<string, string | number>> {
-  const url = `${getConsoleApiOrigin()}/api/product-icons/manifest`
-  try {
-    const res = await fetch(url, { cache: 'no-cache' })
-    if (!res.ok) return {}
-    const json = await res.json()
-    const items: Array<{ app_id?: string; updated_at?: string | number }> =
-      (json as { data?: { items?: Array<{ app_id?: string; updated_at?: string | number }> } })?.data?.items ?? []
-    const map: Record<string, string | number> = {}
-    for (const item of items) {
-      if (item?.app_id) {
-        map[item.app_id] = item.updated_at || 0
-      }
-    }
-    return map
-  } catch {
+  if (!consoleIconsEnabled()) {
     return {}
   }
+
+  const now = Date.now()
+  if (manifestCache && now - manifestCache.at < (manifestCache.ok ? MANIFEST_TTL_MS : MANIFEST_FAILURE_TTL_MS)) {
+    return manifestCache.items
+  }
+
+  // Concurrent callers share one request: the grid opening while a preload is
+  // still in flight would otherwise ask twice and keep the later answer.
+  if (manifestInFlight) {
+    return manifestInFlight
+  }
+
+  const url = `${getConsoleApiOrigin()}/api/product-icons/manifest`
+
+  manifestInFlight = (async (): Promise<Record<string, string | number>> => {
+    try {
+      // `no-cache` (not `no-store`) so the browser may revalidate and take a
+      // 304 — this is only a version list and it gates no paint.
+      const res = await fetch(url, { cache: 'no-cache' })
+      if (!res.ok) {
+        manifestCache = { at: Date.now(), ok: false, items: {} }
+        noteManifestUnavailable(`${res.status} ${res.statusText}`.trim())
+
+        return {}
+      }
+
+      const json = await res.json()
+      const items: Array<{ app_id?: string; updated_at?: string | number }> =
+        (json as { data?: { items?: Array<{ app_id?: string; updated_at?: string | number }> } })?.data?.items ?? []
+      const map: Record<string, string | number> = {}
+      for (const item of items) {
+        if (item?.app_id) {
+          map[item.app_id] = item.updated_at || 0
+        }
+      }
+      manifestCache = { at: Date.now(), ok: true, items: map }
+
+      return map
+    } catch (error) {
+      manifestCache = { at: Date.now(), ok: false, items: {} }
+      noteManifestUnavailable(error instanceof Error ? error.message : 'network error')
+
+      return {}
+    } finally {
+      manifestInFlight = null
+    }
+  })()
+
+  return manifestInFlight
+}
+
+/**
+ * Say once, plainly, that the icon check did not answer.
+ *
+ * The browser logs its own red line for the failed request and nothing in
+ * JavaScript can suppress that. What this adds is the sentence that stops it
+ * reading as a broken application: the launcher works, the tiles are the ones
+ * shipped with this build, and the only thing missing is a newer icon.
+ */
+let manifestWarningShown = false
+
+function noteManifestUnavailable(reason: string): void {
+  if (manifestWarningShown) return
+  manifestWarningShown = true
+  // eslint-disable-next-line no-console
+  console.info(
+    `[app launcher] Console did not answer the product-icon manifest (${reason}). ` +
+      'The launcher is using the icons bundled with this build. Set VITE_CONSOLE_API_BASE_URL=off to stop asking.',
+  )
 }
 
 /** Auth callback URL on the target product. */

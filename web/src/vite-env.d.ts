@@ -8,6 +8,12 @@ interface ImportMetaEnv {
   readonly VITE_PRODUCT_KEY: string
   /** Overrides the login portal origin. For local development only. */
   readonly VITE_PORTAL_LOGIN_URL: string
+  /**
+   * Origin serving the launcher's product icons. Defaults to Console.
+   * Set to `off` to use only the tiles bundled with this build and make no
+   * cross-origin request for them.
+   */
+  readonly VITE_CONSOLE_API_BASE_URL?: string
   /** GA4 measurement ID for this product. Analytics is disabled when unset. */
   readonly VITE_GA4_SAAS_POS_MEASUREMENT_ID?: string
   /** Generic GA4 measurement ID fallback, checked when the product-specific one is unset. */

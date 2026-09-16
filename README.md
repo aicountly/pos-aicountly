@@ -116,6 +116,7 @@ template. There are two of them, and they work in opposite ways:
 | `VITE_APP_ENV` | `local`, `sandbox`, or `production` |
 | `VITE_PRODUCT_KEY` | Portal product key. Derived from the hostname when unset |
 | `VITE_PORTAL_LOGIN_URL` | Login portal override. Local development only |
+| `VITE_CONSOLE_API_BASE_URL` | Where the app launcher asks for product icons. Defaults to Console. `off` uses only the bundled tiles |
 
 Only `VITE_`-prefixed variables reach the browser bundle, and Vite inlines them
 at build time, so **treat every one of them as public**. Never put a secret,

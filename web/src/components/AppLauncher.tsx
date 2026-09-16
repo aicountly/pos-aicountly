@@ -217,14 +217,17 @@ export function AppLauncher() {
     ? apps.filter((app) => app.name.toLowerCase().includes(query.trim().toLowerCase()))
     : apps
 
+  // On mount, only what is same-origin and free: warm the tiles this browser
+  // already decided on, and read the bundle's own version list out of the
+  // build. Console is NOT asked here — this component sits in the header of
+  // every screen, so asking on mount is one cross-origin request per page load
+  // for a version list nobody has asked to see yet.
   useEffect(() => {
     preloadLauncherIcons()
     let active = true
 
-    Promise.all([fetchBundledIconVersions(), fetchProductIconManifest()]).then(([bundled, manifest]) => {
-      if (!active) return
-      setBundledVersions(bundled)
-      setIconVersions(manifest)
+    fetchBundledIconVersions().then((bundled) => {
+      if (active) setBundledVersions(bundled)
     })
 
     return () => {
@@ -232,6 +235,11 @@ export function AppLauncher() {
     }
   }, [])
 
+  // Console is asked when the grid opens, which is where the fleet integration
+  // note says a product picks up an icon change. The answer is cached for the
+  // session, so opening the launcher repeatedly does not re-ask, and a Console
+  // that did not answer is left alone for a few minutes rather than retried on
+  // every open.
   useEffect(() => {
     if (!open) return undefined
     let active = true
