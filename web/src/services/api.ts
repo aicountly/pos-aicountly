@@ -63,6 +63,24 @@ export class ApiError extends Error {
     if (typeof this.details.retryable === 'boolean') return this.details.retryable
     return this.status === 0 || this.status === 503 || this.status === 502
   }
+
+  /**
+   * What the person looking after this deployment should do about it.
+   *
+   * The backend sends one for a failure whose cause it recognised — a schema
+   * that was never migrated, a PHP with no PostgreSQL driver. Showing it beats
+   * the alternative, which is a screenshot of a one-line banner and a guess.
+   */
+  get hint(): string | null {
+    return typeof this.details.fix === 'string' && this.details.fix !== '' ? this.details.fix : null
+  }
+
+  /** The reference this failure was logged under, for grepping the server log. */
+  get reference(): string | null {
+    return typeof this.details.reference === 'string' && this.details.reference !== ''
+      ? this.details.reference
+      : null
+  }
 }
 
 /** The company scope, registered once by CompanyProvider and read by every call. */

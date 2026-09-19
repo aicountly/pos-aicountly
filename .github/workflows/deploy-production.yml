@@ -413,11 +413,26 @@ jobs:
         run: |
           url="https://pos.aicountly.com/api/health"
           code=$(curl -fsS -o /tmp/health.json -w '%{http_code}' --max-time 20 "$url" || echo "000")
-          if [ "$code" = "200" ]; then
-            echo "GET $url → 200"
-            cat /tmp/health.json
-          else
+
+          if [ "$code" != "200" ]; then
             echo "::warning::GET $url returned $code. If this is the first deploy, check that the subdomain's document root is the one in PROD_SSH_REMOTE_ROOT and that api/.env exists."
+            exit 0
+          fi
+
+          echo "GET $url → 200"
+          cat /tmp/health.json
+          echo ""
+
+          # 200 here means PHP is serving, which is not the same as the product
+          # being usable. `usable` is the field that knows the difference, and
+          # `advice` is what to do when it is false -- a deploy that goes green
+          # over an app nobody can sign into is the outcome worth preventing.
+          usable=$(python3 -c 'import json,sys; print(json.load(open("/tmp/health.json")).get("usable"))' 2>/dev/null || echo "unknown")
+          if [ "$usable" != "True" ]; then
+            reason=$(python3 -c 'import json,sys; print(json.load(open("/tmp/health.json")).get("database",{}).get("reason") or "")' 2>/dev/null || echo "")
+            advice=$(python3 -c 'import json,sys; print(json.load(open("/tmp/health.json")).get("advice") or "")' 2>/dev/null || echo "")
+            echo "::warning::The API is serving but reports itself unusable${reason:+ (reason: $reason)}. $advice"
+            echo "::warning::Run php bin/doctor.php in the api folder on the server for the full picture."
           fi
 
       - name: Clean up SSH credentials

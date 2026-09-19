@@ -20,11 +20,37 @@
   RewriteCond %{HTTP:Authorization} .
   RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+  # index.php is the only thing in this folder anybody is meant to fetch.
+  #
+  # The rule below serves any request that names a real file, and every file the
+  # API is made of is a real file sitting inside the document root. Without this
+  # first rule, https://<host>/api/database/migrations/001_pos_terminals.sql
+  # returns the whole schema as plain text to anyone who asks, and
+  # https://<host>/api/bin/migrate.php RUNS the migrations for them — printing
+  # the database, role and host names in the error if it cannot connect.
+  #
+  # No RewriteBase, so the pattern is matched against the path relative to this
+  # directory, and this works both at <docroot>/api and at a vhost root.
+  RewriteRule ^(?:bin|database|src|tests)/ - [R=404,L]
+
   # Everything that is not a real file goes to the front controller.
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.php [L]
 </IfModule>
+
+# The same four folders again, for a host where mod_rewrite is off or
+# AllowOverride does not extend to it. A deployment that silently stopped
+# applying the rules above should fail closed, not publish its schema.
+<FilesMatch "\.(?:sql|sh|md)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
 
 # --- Hardening -------------------------------------------------------------
 <IfModule mod_headers.c>

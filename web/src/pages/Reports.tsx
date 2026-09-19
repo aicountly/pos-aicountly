@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CloudOff, Lock } from 'lucide-react'
 import { usePos } from '../context/PosContext'
-import { api } from '../services/api'
+import { ApiError, api } from '../services/api'
 import type { Dashboard, RegisterSession, ShiftReport } from '../services/types'
 import { Button, Card, DataTable, Field, Input, Notice, StatCard, StatusBadge, money } from '../ui'
+
+/** Everything the API said about a failure, or a fallback when it said nothing. */
+function describe(e: unknown, fallback: string): { message: string; hint?: string | null; reference?: string | null } {
+  if (e instanceof ApiError) {
+    return { message: e.message, hint: e.hint, reference: e.reference }
+  }
+
+  return { message: e instanceof Error ? e.message : fallback }
+}
 
 /**
  * What these tills did today, and what is still stuck.
@@ -17,7 +26,15 @@ export default function Reports() {
   const [board, setBoard] = useState<Dashboard | null>(null)
   const [shift, setShift] = useState<RegisterSession | null>(null)
   const [report, setReport] = useState<ShiftReport | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  /**
+   * The failure, kept whole rather than flattened to a sentence.
+   *
+   * A database failure arrives with the cause the API recognised and the fix
+   * for it, and this screen is where somebody is standing when they find out.
+   * Throwing that away and keeping only `message` is what made the last one
+   * unreadable: one line, four possible causes, no way to tell them apart.
+   */
+  const [error, setError] = useState<{ message: string; hint?: string | null; reference?: string | null } | null>(null)
   const [busy, setBusy] = useState(false)
   const [counted, setCounted] = useState('')
 
@@ -26,7 +43,7 @@ export default function Reports() {
       const response = await api.one<Dashboard>('v1/dashboard')
       setBoard(response.data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the day.')
+      setError(describe(e, 'Could not load the day.'))
     }
 
     if (!terminalId) return
@@ -50,7 +67,7 @@ export default function Reports() {
     if (!shift) return
     const amount = Number(counted)
     if (!Number.isFinite(amount)) {
-      setError('Count the drawer first.')
+      setError({ message: 'Count the drawer first.' })
       return
     }
 
@@ -72,7 +89,7 @@ export default function Reports() {
       setCounted('')
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not close the shift.')
+      setError(describe(e, 'Could not close the shift.'))
     } finally {
       setBusy(false)
     }
@@ -80,7 +97,19 @@ export default function Reports() {
 
   return (
     <div style={{ display: 'grid', gap: '1rem' }}>
-      {error && <Notice tone="danger" onDismiss={() => setError(null)}>{error}</Notice>}
+      {error && (
+        <Notice tone="danger" onDismiss={() => setError(null)}>
+          <div>{error.message}</div>
+          {error.hint && (
+            <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', opacity: 0.85 }}>{error.hint}</div>
+          )}
+          {error.reference && (
+            <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', opacity: 0.7 }}>
+              Logged as <code>{error.reference}</code>.
+            </div>
+          )}
+        </Notice>
+      )}
 
       {board && (board.needs_attention.stuck_commands > 0 || board.needs_attention.pending_offline > 0) && (
         <Notice tone="warning" title="Needs someone to look at it">

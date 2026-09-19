@@ -172,6 +172,8 @@ if ($path === '' || $path === 'health') {
     // every real endpoint answered 503.
     $database = Health::database();
 
+    $usable = $database['reachable'] && ($database['schema']['ready'] ?? false);
+
     send_json(200, [
         'status' => 'ok',
         'app' => 'POS',
@@ -180,7 +182,10 @@ if ($path === '' || $path === 'health') {
         'database' => $database,
         // One field to read when something is wrong. False means the site
         // is up and the product is not usable.
-        'usable' => $database['reachable'] && ($database['schema']['ready'] ?? false),
+        'usable' => $usable,
+        // And, when it is false, what to do about it — so this page is the end
+        // of the investigation rather than the start of a second one.
+        'advice' => Health::advice($database),
     ]);
 }
 
@@ -251,11 +256,28 @@ try {
 } catch (\PDOException $e) {
     // A database problem is ours, not the caller's. The detail goes to the log;
     // the caller gets something they can act on.
-    error_log('[pos] database error on ' . $path . ': ' . $e->getMessage());
-    Http::error(503, 'database_unavailable', 'The POS database is not reachable right now. Please retry.');
+    //
+    // "Something they can act on" is why this is not one sentence any more. A
+    // schema that was never installed, a PHP with no PostgreSQL driver and a
+    // rejected password are three different jobs, and reporting all three as
+    // "not reachable, please retry" sent people to look at the one thing —
+    // the network — that was never wrong. DbDiagnosis names the cause; the
+    // reference ties this response to the log line that holds the full text.
+    $diagnosis = DbDiagnosis::of($e);
+    $reference = DbDiagnosis::log($e, $path, $diagnosis['reason']);
+
+    Http::error(503, 'database_unavailable', $diagnosis['message'], [
+        'reason'    => $diagnosis['reason'],
+        // The UI offers Retry from this. Retrying a missing schema forever is
+        // not a thing to invite anyone to do.
+        'retryable' => $diagnosis['retryable'],
+        'fix'       => $diagnosis['fix'],
+        'reference' => $reference,
+    ]);
 } catch (\Throwable $e) {
-    error_log('[pos] unhandled error on ' . $path . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
-    Http::error(500, 'server_error', 'Something went wrong handling that request.');
+    $reference = strtoupper(bin2hex(random_bytes(3)));
+    error_log('[pos] unhandled error ref=' . $reference . ' on ' . $path . ': ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    Http::error(500, 'server_error', 'Something went wrong handling that request.', ['reference' => $reference]);
 }
 
 send_json(404, ['message' => 'Not found.']);

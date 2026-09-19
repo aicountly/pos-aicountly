@@ -27,6 +27,19 @@ final class Db
             return self::$pdo;
         }
 
+        // Checked before the credentials, because a PHP without the PostgreSQL
+        // driver produces a connection error that reads exactly like a database
+        // that is down — and cPanel configures the web PHP and the SSH PHP
+        // separately, so migrations can run happily over SSH while every page
+        // on the site fails here. Saying so plainly is the difference between
+        // ticking one box in Select PHP Version and searching the network for a
+        // fault that was never there.
+        if (!DbDiagnosis::driverLoaded()) {
+            throw new PDOException(
+                'could not find driver: this PHP has no pdo_pgsql extension (SAPI ' . PHP_SAPI . ', PHP ' . PHP_VERSION . ').',
+            );
+        }
+
         $host = Env::get('DB_HOST', '127.0.0.1');
         $port = Env::get('DB_PORT', '5432');
         $name = Env::get('DB_NAME');

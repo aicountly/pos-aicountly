@@ -19,12 +19,20 @@ use PDOException;
  * been applied, which is the difference between an app somebody can use and one
  * that only looks alive.
  *
- * WHAT IT MUST NOT SAY. This endpoint is UNAUTHENTICATED and public. The driver's
- * own message names the database, the role and the host — PostgreSQL's
+ * WHY IT REPORTS THE DRIVER AND THE .ENV. Those two facts are about the PHP
+ * that answers THIS request, and no other check can see them. cPanel configures
+ * the web PHP and the SSH PHP separately, so a deploy can run migrations
+ * successfully over SSH and leave the website unable to load pdo_pgsql at all —
+ * from the outside that looks exactly like a database that is down. Reading
+ * them here, from the web handler, is what tells those two apart.
+ *
+ * WHAT IT MUST NOT SAY. This endpoint is UNAUTHENTICATED and public. The
+ * driver's own message names the database, the role and the host — PostgreSQL's
  * "no pg_hba.conf entry for host X, user Y, database Z" hands all three to
  * anyone who asks. So the reason is reduced to a category here and the detail
  * goes to the error log, where the person fixing it can read it and a passer-by
- * cannot.
+ * cannot. Everything reported below is a boolean or a category for the same
+ * reason: it says whether a thing is set, never what it is set to.
  */
 final class Health
 {
@@ -36,18 +44,43 @@ final class Health
      */
     public static function database(): array
     {
+        // Reported whatever happens next, because these are the two causes a
+        // connection error cannot distinguish itself from.
+        $config = [
+            'driver'     => DbDiagnosis::driverLoaded(),
+            'env_file'   => is_readable(__DIR__ . '/../.env'),
+            'configured' => Env::get('DB_NAME') !== '' && Env::get('DB_USER') !== '',
+        ];
+
+        // Asked first, and answered without touching the network: a PHP that
+        // cannot load pdo_pgsql fails in a way that is indistinguishable from
+        // an unreachable server, and on some builds it fails before PDOException
+        // itself exists to be caught.
+        if ($config['driver'] !== true) {
+            return [
+                'reachable' => false,
+                'reason'    => 'driver_missing',
+                'config'    => $config,
+                'schema'    => null,
+            ];
+        }
+
         try {
             $pdo = Db::connect();
         } catch (PDOException $e) {
+            $reason = DbDiagnosis::of($e)['reason'];
+            DbDiagnosis::log($e, 'health', $reason);
+
             return [
                 'reachable' => false,
-                'reason'    => self::categorise($e->getMessage()),
+                'reason'    => $reason,
+                'config'    => $config,
                 'schema'    => null,
             ];
         } catch (\Throwable $e) {
             error_log('[health] database check failed: ' . $e->getMessage());
 
-            return ['reachable' => false, 'reason' => 'error', 'schema' => null];
+            return ['reachable' => false, 'reason' => 'error', 'config' => $config, 'schema' => null];
         }
 
         $onDisk = count(glob(__DIR__ . '/../database/migrations/*.sql') ?: []);
@@ -64,6 +97,7 @@ final class Health
         return [
             'reachable' => true,
             'reason'    => null,
+            'config'    => $config,
             'schema'    => [
                 'applied' => $applied,
                 'pending' => max(0, $onDisk - $applied),
@@ -74,28 +108,21 @@ final class Health
     }
 
     /**
-     * A category a stranger may see, from a message they may not.
+     * One sentence naming what to do next, or null when nothing is wrong.
      *
-     * The full driver text is logged, because the person who has to fix this
-     * needs the database and role names that the category deliberately omits.
+     * Health is the page somebody opens when the app is broken, so it should
+     * not make them look the category up somewhere else.
      */
-    private static function categorise(string $message): string
+    public static function advice(array $database): ?string
     {
-        error_log('[health] database unreachable: ' . $message);
+        if ($database['reachable'] !== true) {
+            return DbDiagnosis::describe((string) ($database['reason'] ?? 'error'))['fix'];
+        }
 
-        $m = strtolower($message);
+        if (($database['schema']['ready'] ?? false) !== true) {
+            return DbDiagnosis::describe('schema_missing')['fix'];
+        }
 
-        return match (true) {
-            str_contains($m, 'not configured')       => 'not_configured',
-            str_contains($m, 'pg_hba'),
-            str_contains($m, 'password authentication'),
-            str_contains($m, 'role ') && str_contains($m, 'does not exist') => 'refused',
-            str_contains($m, 'does not exist')       => 'no_such_database',
-            str_contains($m, 'connection refused'),
-            str_contains($m, 'could not connect'),
-            str_contains($m, 'timeout')              => 'unreachable',
-            str_contains($m, 'could not find driver') => 'driver_missing',
-            default                                   => 'error',
-        };
+        return null;
     }
 }

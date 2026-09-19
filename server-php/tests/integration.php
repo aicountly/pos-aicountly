@@ -1835,6 +1835,149 @@ check('the offline cache guarantee is enforced by the database, not by code', fu
 });
 
 // ---------------------------------------------------------------------------
+// Diagnosing a database failure
+//
+// These run real failures against the real driver rather than asserting on
+// hand-written message strings, because the strings are PostgreSQL's and libpq
+// changes them between versions. What matters is that each cause still comes
+// out under its own name, and that the sentence shown to a user never contains
+// the database, role or host it came from.
+// ---------------------------------------------------------------------------
+
+echo "\nDiagnosing a database failure\n";
+
+/** The reason DbDiagnosis gives for whatever $fn throws. */
+function reasonFor(callable $fn): string
+{
+    try {
+        $fn();
+    } catch (\Throwable $e) {
+        return DbDiagnosis::of($e)['reason'];
+    }
+
+    throw new \RuntimeException('expected a failure, got none');
+}
+
+check('a table that was never migrated is a missing schema, not an unreachable server', function () {
+    assertSame('schema_missing', reasonFor(fn () => Db::all('SELECT * FROM pos_table_that_was_never_migrated')), 'an undefined table is the shape of a database nobody migrated');
+});
+
+check('a column a pending migration would have added is a stale schema', function () {
+    assertSame('schema_stale', reasonFor(fn () => Db::all('SELECT column_from_a_future_migration FROM pos_carts')), 'an undefined column is the shape of a schema one release behind');
+});
+
+check('a rejected password is refused, and is never reported as retryable', function () {
+    $reason = reasonFor(fn () => new \PDO(
+        sprintf('pgsql:host=%s;port=%s;dbname=%s', Env::get('DB_HOST', '127.0.0.1'), Env::get('DB_PORT', '5432'), Env::get('DB_NAME')),
+        Env::get('DB_USER'),
+        Env::get('DB_PASS') . '-wrong',
+        [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION],
+    ));
+
+    assertSame('refused', $reason, 'libpq reports a bad password as a connection failure; the reason must not');
+    assertTrue(DbDiagnosis::describe($reason)['retryable'] === false, 'retrying a wrong password forever helps nobody');
+});
+
+check('a database that does not exist is named as such, not as a network fault', function () {
+    assertSame('no_such_database', reasonFor(fn () => new \PDO(
+        sprintf('pgsql:host=%s;port=%s;dbname=%s', Env::get('DB_HOST', '127.0.0.1'), Env::get('DB_PORT', '5432'), 'pos_no_such_database'),
+        Env::get('DB_USER'),
+        Env::get('DB_PASS'),
+        [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION],
+    )), 'a missing database is somebody typing the name without the cPanel prefix, not a network fault');
+});
+
+check('nothing listening on the port is the one cause that IS worth retrying', function () {
+    $reason = reasonFor(fn () => new \PDO(
+        'pgsql:host=127.0.0.1;port=1;dbname=' . Env::get('DB_NAME'),
+        Env::get('DB_USER'),
+        Env::get('DB_PASS'),
+        [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION],
+    ));
+
+    assertSame('unreachable', $reason, 'a closed port is the one failure that genuinely is a connection failure');
+    assertTrue(DbDiagnosis::describe($reason)['retryable'], 'a server that is down may well be up on the next press');
+});
+
+check('the message shown to a user never names the database, the role or the host', function () {
+    // The driver's own text carries all three — "no pg_hba.conf entry for host
+    // X, user Y, database Z" hands them to whoever is looking. What is shown on
+    // a screen, or returned by the unauthenticated health endpoint, must not.
+    //
+    // Proved with canaries rather than by searching for the real values: the
+    // fix for an unreachable server legitimately mentions 127.0.0.1 as the
+    // address cPanel uses, and that constant must not be mistaken for a leak of
+    // a DB_HOST that happens to be the same. A canary can only appear in a
+    // string that read it, which is exactly the mistake worth catching.
+    $canaries = [
+        'DB_NAME' => 'canary-database-name',
+        'DB_USER' => 'canary-role-name',
+        'DB_PASS' => 'canary-password',
+        'DB_HOST' => 'canary.host.invalid',
+    ];
+
+    $restore = [];
+    foreach ($canaries as $key => $value) {
+        $restore[$key] = getenv($key);
+        putenv($key . '=' . $value);
+    }
+
+    try {
+        foreach (['not_configured', 'driver_missing', 'unreachable', 'refused', 'no_such_database',
+                  'schema_missing', 'schema_stale', 'permission_denied', 'overloaded', 'starting_up', 'error'] as $reason) {
+            $described = DbDiagnosis::describe($reason);
+            $public = strtolower($described['message'] . ' ' . $described['fix']);
+            foreach ($canaries as $key => $value) {
+                assertTrue(!str_contains($public, strtolower($value)), "the {$reason} message leaks {$key}");
+            }
+        }
+    } finally {
+        foreach ($restore as $key => $value) {
+            $value === false ? putenv($key) : putenv($key . '=' . $value);
+        }
+    }
+});
+
+check('every reason a failure can be given has a message and a fix', function () {
+    // A reason with no entry falls back to "error", which would quietly undo
+    // the point of naming it. Catch that here rather than on a broken host.
+    $reasons = ['not_configured', 'driver_missing', 'unreachable', 'refused', 'no_such_database',
+                'schema_missing', 'schema_stale', 'permission_denied', 'overloaded', 'starting_up'];
+
+    foreach ($reasons as $reason) {
+        $described = DbDiagnosis::describe($reason);
+        assertSame($reason, $described['reason'], "{$reason} is not a reason DbDiagnosis knows");
+        assertTrue($described['fix'] !== DbDiagnosis::describe('error')['fix'], "{$reason} has no fix of its own");
+    }
+});
+
+check('health reports the driver and the .env without saying what they hold', function () {
+    $health = Health::database();
+
+    assertTrue($health['config']['driver'] === true, 'this test suite is running on a PHP with pdo_pgsql');
+    assertTrue($health['config']['configured'] === true, 'and against a configured database');
+    assertTrue($health['reachable'] === true, 'and a reachable one');
+    assertTrue(Health::advice($health) === null, 'a healthy deployment needs no advice');
+
+    // Public endpoint: booleans and categories only, no values.
+    $json = strtolower(json_encode($health, JSON_THROW_ON_ERROR));
+    foreach (array_filter([strtolower(Env::get('DB_NAME')), strtolower(Env::get('DB_USER')), strtolower(Env::get('DB_PASS'))]) as $secret) {
+        assertTrue(!str_contains($json, $secret), 'GET /api/health leaked a value from .env');
+    }
+    assertTrue(!str_contains($json, 'sqlstate'), 'and it must never repeat the driver\'s own message');
+});
+
+check('an unmigrated database is reported as unusable, with the migration command to run', function () {
+    // What a first deploy looks like before anyone runs migrate.php: the site
+    // is up, and the product cannot be used. Those must not read the same.
+    $unmigrated = ['reachable' => true, 'reason' => null, 'config' => [], 'schema' => ['applied' => 0, 'pending' => 4, 'ready' => false]];
+
+    $advice = Health::advice($unmigrated);
+    assertTrue($advice !== null, 'a database with no schema is not a healthy one');
+    assertTrue(str_contains((string) $advice, 'migrate.php'), 'and the advice should name the thing that fixes it');
+});
+
+// ---------------------------------------------------------------------------
 
 echo "\n{$passed} passed, {$failed} failed\n\n";
 exit($failed === 0 ? 0 : 1);

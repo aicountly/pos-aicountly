@@ -16,8 +16,18 @@ declare(strict_types=1);
 
 namespace Aicountly\Api;
 
+// This file sits inside the document root, where Apache serves any real file.
+// Fetched over HTTP it would apply migrations for a stranger and print the
+// database, role and host names in the error when it could not. .htaccess
+// denies the folder; this denies it again without needing AllowOverride.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 require __DIR__ . '/../src/Env.php';
 require __DIR__ . '/../src/Db.php';
+require __DIR__ . '/../src/DbDiagnosis.php';
 
 Env::load(__DIR__ . '/../.env');
 
