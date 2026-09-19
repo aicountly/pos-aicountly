@@ -33,8 +33,28 @@ final class DashboardController extends Controller
         [$auth, $ctx] = self::enter();
         Permissions::assert($ctx, $auth, 'reports.view');
 
-        $from = Http::param('from') ?? gmdate('Y-m-d');
-        $to   = Http::param('to') ?? $from;
+        Http::data(self::todayFor(
+            $ctx,
+            Http::param('from') ?? gmdate('Y-m-d'),
+            Http::param('to') ?? Http::param('from') ?? gmdate('Y-m-d'),
+        ));
+    }
+
+    /**
+     * The day's figures for one company scope.
+     *
+     * Split out from the endpoint above so it can be run without a request.
+     * It was the only dashboard query with no test, being the one thing in
+     * here that needed an HTTP request to reach, and it was the one that was
+     * broken: the exceptions query below named a :cmp parameter that was never
+     * supplied, so PostgreSQL rejected the bind and every call to /v1/dashboard
+     * answered 503. The five boards under Domain/Dashboards are plain objects
+     * for exactly this reason; this now follows them.
+     *
+     * @return array<string, mixed>
+     */
+    public static function todayFor(Context $ctx, string $from, string $to): array
+    {
         [$scope, $params] = $ctx->scopeClause();
         $params['from'] = $from;
         $params['to']   = $to;
@@ -92,7 +112,13 @@ final class DashboardController extends Controller
                 (SELECT COUNT(*) FROM pos_approval_events WHERE cmp_id = :cmp AND event_kind IN ('discount', 'price_override')
                    AND created_at >= :from::date AND created_at < (:to::date + INTERVAL '1 day')) AS overrides,
                 (SELECT COALESCE(SUM(refund_amount), 0) FROM pos_returns WHERE {$scope} AND status <> 'CANCELLED'{$window}) AS refunds",
-            $params,
+            // pos_approval_events is scoped by company alone -- it carries no
+            // fy_id or bo_id -- so those two subqueries name :cmp rather than
+            // reusing {$scope}, and :cmp has to be supplied alongside it. With
+            // emulated prepares off, a placeholder with no value is not a PHP
+            // error: PostgreSQL receives the statement, counts one more
+            // parameter than the bind supplies, and rejects the whole thing.
+            $params + ['cmp' => $ctx->cmpId],
         ) ?? [];
 
         // The two numbers a manager needs and nobody else shows: sales that
@@ -107,7 +133,7 @@ final class DashboardController extends Controller
             array_diff_key($params, ['from' => 1, 'to' => 1]),
         );
 
-        Http::data([
+        return [
             'window' => ['from' => $from, 'to' => $to],
             'sales'  => [
                 'bills'         => (int) ($sales['bills'] ?? 0),
@@ -150,7 +176,7 @@ final class DashboardController extends Controller
             // Said plainly, because two numbers under one word is how a manager
             // stops trusting a dashboard.
             'source_note' => 'Counted from this POS. The accounting figures are in Books and can differ.',
-        ]);
+        ];
     }
 
     // -----------------------------------------------------------------------

@@ -37,6 +37,7 @@ use Aicountly\Api\Domain\MenuService;
 use Aicountly\Api\Domain\RegisterService;
 use Aicountly\Api\Domain\ReturnService;
 use Aicountly\Api\Domain\TableService;
+use Aicountly\Api\Controllers\DashboardController;
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -1691,6 +1692,85 @@ check('an outlet id belonging to another company is a 404, not an empty board', 
         'does not exist in this company',
         'a foreign outlet id is refused rather than silently returning nothing',
     );
+});
+
+check('the single-day board runs, in both the consolidated and the branch scope', function () use ($ctx, $auth) {
+    // THE REGRESSION. /v1/dashboard named a :cmp parameter in its exceptions
+    // query and never supplied it. With emulated prepares off that is not a PHP
+    // error -- PostgreSQL counted one more parameter than the bind supplied and
+    // refused the statement -- so the endpoint answered 503 and the screen said
+    // the database was unreachable. It was reachable, and everything else on it
+    // worked.
+    //
+    // Both scopes are run because the count differs between them: a
+    // consolidated scope binds four values and a branch scope five, and a
+    // parameter that is missing from one may be present in the other.
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 500.0);
+
+    $paid = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CheckoutService($ctx, $auth))->checkout((int) $paid['cart_id'], [
+        'payments' => [['payment_mode' => 'cash', 'amount' => (float) $paid['total_amount']]],
+    ]);
+
+    $voided = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CartService($ctx, $auth))->void((int) $voided['cart_id'], ['reason' => 'Changed their mind']);
+
+    // The two rows the broken subqueries were counting.
+    Db::insert('pos_approval_events', [
+        'cmp_id' => $ctx->cmpId, 'terminal_id' => $terminalId, 'session_id' => $sessionId,
+        'event_kind' => 'no_sale', 'requested_by' => $auth->uuid, 'reason' => 'Opened for change',
+    ], 'approval_id');
+    Db::insert('pos_approval_events', [
+        'cmp_id' => $ctx->cmpId, 'terminal_id' => $terminalId, 'session_id' => $sessionId,
+        'event_kind' => 'discount', 'requested_by' => $auth->uuid, 'reason' => 'Regular customer',
+    ], 'approval_id');
+
+    // A day either side, so a run near midnight UTC does not straddle the edge.
+    $from = gmdate('Y-m-d', time() - 86400);
+    $to   = gmdate('Y-m-d', time() + 86400);
+
+    foreach (['consolidated' => $ctx, 'one branch' => freshContext($ctx->cmpId, $ctx->fyId, 3)] as $label => $scope) {
+        $board = DashboardController::todayFor($scope, $from, $to);
+
+        assertSame(1, $board['sales']['bills'], "one completed bill ({$label})");
+        assertSame(round((float) $paid['total_amount'], 2), round($board['sales']['net'], 2), "net sales ({$label})");
+        assertSame(1, $board['exceptions']['voids'], "the void is counted ({$label})");
+        assertSame(1, $board['exceptions']['no_sales'], "the no-sale is counted ({$label})");
+        assertSame(1, $board['exceptions']['overrides'], "the discount override is counted ({$label})");
+        assertSame(0.0, $board['exceptions']['refunds'], "nothing refunded ({$label})");
+        assertSame(0, $board['needs_attention']['pending_offline'], "nothing waiting offline ({$label})");
+        assertSame(1, count($board['tenders']), "the cash tender is listed ({$label})");
+    }
+});
+
+check('a placeholder with no value is reported by name, not as a count', function () {
+    // PostgreSQL says only "bind message supplies 1 parameters, but prepared
+    // statement requires 2", naming neither the query nor the parameter. That
+    // sentence is what the bug above cost a morning to read.
+    try {
+        Db::all('SELECT * FROM pos_carts WHERE cmp_id = :cmp AND status = :status', ['cmp' => 1]);
+        assertTrue(false, 'a query missing a parameter should not succeed');
+    } catch (\PDOException $e) {
+        assertTrue(str_contains($e->getMessage(), 'never supplied: :status'), 'the message names the missing parameter: ' . $e->getMessage());
+        // The enriched message must not cost the SQLSTATE: everything upstream
+        // classifies and logs by it.
+        assertSame('08P01', (string) $e->getCode(), 'the driver\'s SQLSTATE survives the rewrite');
+    }
+});
+
+check('a value with no placeholder is PDO\'s to catch, and it already names it', function () {
+    // The opposite mistake never reaches PostgreSQL, so it never produced the
+    // unreadable count above and needs nothing added to it. Asserted so that
+    // the enrichment is not extended to a case that is already clear.
+    try {
+        Db::all('SELECT * FROM pos_carts WHERE cmp_id = :cmp', ['cmp' => 1, 'status' => 'OPEN']);
+        assertTrue(false, 'a query given an unused parameter should not succeed');
+    } catch (\PDOException $e) {
+        assertTrue(str_contains($e->getMessage(), 'Invalid parameter number'), 'PDO rejects it: ' . $e->getMessage());
+        assertTrue(str_contains($e->getMessage(), 'status'), 'and names it: ' . $e->getMessage());
+    }
 });
 
 echo "\nData ownership (release-blocking)\n";

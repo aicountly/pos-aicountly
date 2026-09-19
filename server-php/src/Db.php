@@ -73,9 +73,63 @@ final class Db
     public static function run(string $sql, array $params = []): PDOStatement
     {
         $stmt = self::connect()->prepare($sql);
-        $stmt->execute($params);
+
+        try {
+            $stmt->execute($params);
+        } catch (PDOException $e) {
+            throw self::nameTheParameter($e, $sql, $params);
+        }
 
         return $stmt;
+    }
+
+    /**
+     * Say WHICH parameter, when PostgreSQL will only say how many.
+     *
+     * Emulated prepares are off (see connect()), so a placeholder the caller
+     * forgot to supply is not a PHP error and not caught by anything here: the
+     * statement reaches PostgreSQL, which counts one more parameter than the
+     * bind supplies and rejects all of it with
+     *
+     *     bind message supplies 4 parameters, but prepared statement
+     *     "pdo_stmt_00000006" requires 5
+     *
+     * — a sentence naming neither the query nor the missing name, on a
+     * generated statement id that means nothing outside the connection. That
+     * is what one live endpoint answered 503 with. Both halves of the answer
+     * are already here: the names in the SQL and the keys in the array.
+     *
+     * @param array<string|int, mixed> $params
+     */
+    private static function nameTheParameter(PDOException $e, string $sql, array $params): PDOException
+    {
+        if (!str_contains($e->getMessage(), 'bind message supplies')) {
+            return $e;
+        }
+
+        // `:name`, but never the `::` of a PostgreSQL cast: the lookbehind
+        // stops `:from::date` from being read as a second placeholder `:date`.
+        if (preg_match_all('/(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/', $sql, $matches) === false) {
+            return $e;
+        }
+
+        $wanted = array_values(array_unique($matches[1]));
+        if ($wanted === []) {
+            return $e;
+        }
+
+        // Only the missing direction is handled here. A value with no
+        // placeholder never reaches PostgreSQL: PDO rejects it first with
+        // "HY093 Invalid parameter number: :status", which already names it.
+        $missing = array_values(array_diff($wanted, array_map('strval', array_keys($params))));
+        if ($missing === []) {
+            return $e;
+        }
+
+        return new DbParameterMismatch(
+            $e->getMessage() . ' -- never supplied: :' . implode(', :', $missing),
+            $e,
+        );
     }
 
     /**
