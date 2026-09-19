@@ -261,8 +261,33 @@ export interface Kot {
   lines: KotLine[]
 }
 
+/**
+ * The sale a return came off, and the till it was taken on.
+ *
+ * READ, NOT COPIED. Every field here belongs to the cart or the terminal and is
+ * joined at read time, so a customer renamed in Books or a till renamed in Setup
+ * is renamed on last month's returns too. Null throughout when the return was
+ * taken against an invoice this POS never raised.
+ */
+export interface ReturnContext {
+  customer_name: string | null
+  customer_mobile: string | null
+  channel: string | null
+  token_no: string | null
+  sale_total: number | null
+  sale_subtotal: number | null
+  sale_discount: number | null
+  sale_tax: number | null
+  sale_date: string | null
+  terminal_code: string | null
+  terminal_name: string | null
+  /** The replacement sale, when this return was settled as an exchange. */
+  exchange_sale: { cart_id: number; status: string; total_amount: number; invoice_no: string | null } | null
+}
+
 export interface PosReturn {
   return_id: number
+  return_uuid: string
   return_no: string
   return_date: string
   status: 'DRAFT' | 'APPROVED' | 'RECEIVED' | 'SETTLED' | 'CANCELLED'
@@ -272,18 +297,32 @@ export interface PosReturn {
   reason_note: string | null
   refund_amount: number
   customer_account_id: number | null
+  cart_id: number | null
+  exchange_cart_id: number | null
+  terminal_id: number | null
+  session_id: number | null
+  books_invoice_id: number | null
   books_invoice_no: string | null
+  books_invoice_uuid: string | null
   books_credit_note_uuid: string | null
   inventory_document_uuid: string | null
   created_by: string
+  approved_by: string | null
+  created_at: string
+  updated_at: string
   lines: ReturnLine[]
   commands?: IntegrationCommand[]
+  context?: ReturnContext
 }
 
 export interface ReturnLine {
   line_id: number
   line_no: number
+  cart_line_id: number | null
   item_id: number | null
+  unit_id: number | null
+  warehouse_id: number | null
+  batch_id: number | null
   display_name: string | null
   return_qty: number
   rate: number

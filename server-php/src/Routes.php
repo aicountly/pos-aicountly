@@ -109,8 +109,13 @@ final class Routes
         $router->put('v1/menu/items/{id}/availability', [RestaurantController::class, 'setAvailability']);
         $router->get('v1/menu/items/{id}/modifiers', [RestaurantController::class, 'modifiers']);
 
-        // Counter returns.
+        // Counter returns. The two static paths are declared BEFORE
+        // `v1/returns/{id}`: the router takes the first pattern that matches,
+        // and `{id}` would otherwise swallow `summary` and try to load a return
+        // with that name.
         $router->get('v1/returns', [ReturnsController::class, 'index']);
+        $router->get('v1/returns/summary', [ReturnsController::class, 'summary']);
+        $router->get('v1/returns/eligibility', [ReturnsController::class, 'eligibility']);
         $router->post('v1/returns', [ReturnsController::class, 'create']);
         $router->get('v1/returns/{id}', [ReturnsController::class, 'show']);
         $router->post('v1/returns/{id}/approve', [ReturnsController::class, 'approve']);

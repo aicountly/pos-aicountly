@@ -240,7 +240,7 @@ server-php/
   database/migrations/     001 terminals · 002 restaurant · 003 integration
                            · 004 dashboards (trading day, targets, read indexes)
   tests/
-    integration.php        46 tests, incl. the release-blocking ownership suite
+    integration.php        76 tests, incl. the release-blocking ownership suite
     run.sh                 real PostgreSQL + a stub for Books and Inventory
     stub/router.php        the stub
 
@@ -249,6 +249,12 @@ web/src/
   offline/sync.ts          draining the outbox
   services/api.ts          typed fetch; one 401 retry with a fresh key
   context/PosContext.tsx   company scope, permissions, which till this is
+  services/returns.ts      every call the Returns workspace makes
+  dashboards/              the shared board furniture: shell, charts, panels,
+                           formatting — the Returns workspace is built from it
+  returns/                 the Returns & Exchanges workspace: hero, KPIs,
+                           analytics, register, filters, detail drawer and the
+                           new-return flow
   pages/                   Till, Floor, Kitchen, Returns, OfflineQueue,
                            Reports, Setup
 ```
@@ -256,9 +262,9 @@ web/src/
 ## Charts, without a chart library
 
 The dashboards draw their own SVG. Every candidate library is 50-150 kB on a till
-that is often a cheap tablet on shop broadband, and four chart shapes are needed
-across five boards — each about twenty lines of path arithmetic. The trade
-favours the arithmetic.
+that is often a cheap tablet on shop broadband, and six chart shapes cover the
+five boards and the returns register — each about twenty lines of path
+arithmetic. The trade favours the arithmetic.
 
 The accessibility consequence is handled rather than ignored: an SVG is invisible
 to a screen reader and unreadable to someone who cannot separate the series
