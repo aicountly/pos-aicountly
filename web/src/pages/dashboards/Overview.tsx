@@ -41,7 +41,7 @@ export default function Overview() {
       visibleTabs={tabs}
       filterControls={<DashboardFilterBar filters={filters} update={update} />}
       freshnessLabel={<Freshness at={board.fetchedAt} refreshing={board.refreshing} />}
-      primaryAction={{ label: 'Open POS', to: '/' }}
+      primaryAction={{ label: 'Open POS', to: '/till' }}
       secondaryActions={
         can('reports.view') ? (
           <Link className="pos-button pos-button--secondary" to={withFilters('/controls', filters)}>

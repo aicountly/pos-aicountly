@@ -4,6 +4,7 @@ import { useAuth } from './auth/AuthProvider'
 import { PosProvider, usePos } from './context/PosContext'
 import { AppShell } from './shell/AppShell'
 import SignIn from './pages/SignIn'
+import Home from './pages/Home'
 import Till from './pages/Till'
 import Floor from './pages/Floor'
 import Kitchen from './pages/Kitchen'
@@ -81,7 +82,11 @@ export default function App() {
         <PageViews />
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<RequireScope><Till /></RequireScope>} />
+            {/* The home screen is the landing page; the counter itself is /till,
+                so a cashier goes straight to selling and everyone else lands on
+                the state of the shop. */}
+            <Route index element={<RequireScope><Home /></RequireScope>} />
+            <Route path="till" element={<RequireScope><Till /></RequireScope>} />
 
             {/* The five dashboards. Each endpoint asserts its own permission, so
                 a URL typed by someone who may not see it answers 403 rather than

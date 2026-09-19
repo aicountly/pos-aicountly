@@ -249,7 +249,9 @@ web/src/
   offline/sync.ts          draining the outbox
   services/api.ts          typed fetch; one 401 retry with a fresh key
   context/PosContext.tsx   company scope, permissions, which till this is
-  pages/                   Till, Floor, Kitchen, Returns, OfflineQueue,
+  home/                    the home screen at `/` — model.ts is the view model
+                           and the file worth reading first
+  pages/                   Home, Till, Floor, Kitchen, Returns, OfflineQueue,
                            Reports, Setup
 ```
 

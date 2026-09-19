@@ -11,8 +11,16 @@ with a small PHP API alongside it. Both halves deploy to cPanel.
 ## What this app does today
 
 A working point of sale: retail checkout, restaurant tables and kitchen tickets,
-counter returns, shifts and the cash drawer — and **five dashboards** over the
-top of them.
+counter returns, shifts and the cash drawer — a **home screen** over the counter
+itself, and **five dashboards** over the business.
+
+`/` is the home screen and `/till` is the counter. The home screen answers, in
+this order, whether this counter can sell right now, what is in the way, and
+what the shop took today; its hero changes with the answer — set up a till,
+choose which till this browser is, open a shift, or sell. A cashier still goes
+straight to selling from the Till link, and the onboarding notice that used to
+be the whole screen for a new company now lives in that hero rather than above
+it. See [docs/DASHBOARDS.md](docs/DASHBOARDS.md#the-home-screen).
 
 | Board | Route |
 |---|---|
@@ -46,6 +54,7 @@ See [docs/auth/AICOUNTLY_AUTH_WORKFLOW.md](docs/auth/AICOUNTLY_AUTH_WORKFLOW.md)
 ```
 web/          React app (Vite). Builds to web/dist, deployed to the document root.
   src/dashboards/   the .pos-* design system, shared shell, charts and filters
+  src/home/         the home screen: its view model, its parts and its styles
   src/pages/        the operational screens, and dashboards/ for the five boards
 server-php/   PHP API. Deployed to the api/ folder inside the document root.
   src/Domain/Dashboards/   one board service per dashboard, plus the shared

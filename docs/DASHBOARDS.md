@@ -1,4 +1,38 @@
-# The five POS dashboards
+# The home screen and the five POS dashboards
+
+## The home screen
+
+`/` is not a sixth board. It is the operational home: whether this counter can
+sell, what is in the way, and what the shop took today — in that order.
+
+It adds **no endpoint**. It asks `v1/dashboards/overview` (when the person has
+`reports.view`) and `v1/dashboards/retail` (`reports.view` or `sell`), joins
+them to `v1/session`, this till's `v1/shifts/current`, unsettled rows from
+`v1/returns` and this device's own outbox, and composes the result in
+`web/src/home/model.ts`. A second definition of "today's takings" would be one
+more thing to keep in step with this one.
+
+Permissions are respected by not asking. A person without `reports.view` is not
+shown a zero where the shop's takings would be; the board is not requested and
+the card says the figure is not theirs. A cashier with `sell` gets the retail
+board's figures, which the server has already narrowed to their own counters,
+and the card says so.
+
+What it will not claim, for the same reasons the boards will not:
+
+* **System Health is not a device monitor.** The connection and the outbox are
+  live because the browser owns them. The printer, the drawer and the kitchen
+  rows report what the till is *configured* with and say so; the payments row
+  reads "Recorded only", never "Operational", because POS integrates no
+  provider. Where a check could not be read at all the summary says "Some
+  checks unavailable" rather than "All systems operational".
+* **The Aicountly AI card is rule-based.** Every item is a threshold crossing
+  over POS' own rows and carries a "Rule-based" tag, and the card's foot says no
+  model is connected. There is no predicted footfall, no suggested staffing and
+  no trending product, because nothing in this product observes or forecasts
+  those. Server-side items arrive through the same list when they exist.
+
+## The five dashboards
 
 Five boards, one shell. Each is a real question a shop asks, and each is built
 from a separate endpoint that enforces its own permission and scopes its own

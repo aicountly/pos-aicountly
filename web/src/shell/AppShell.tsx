@@ -5,6 +5,7 @@ import {
   ChefHat,
   CloudOff,
   Coins,
+  LayoutDashboard,
   LogOut,
   Menu,
   RotateCcw,
@@ -76,7 +77,10 @@ const DASHBOARD_NAV: NavEntry[] = [
 ]
 
 const WORK_NAV: NavEntry[] = [
-  { to: '/', label: 'Till', icon: ScanLine, exact: true, permissions: ['sell'] },
+  // No permission: the home screen is the landing page and shows each person
+  // what they may see, rather than being hidden from anyone.
+  { to: '/', label: 'Home', icon: LayoutDashboard, exact: true, permissions: [] },
+  { to: '/till', label: 'Till', icon: ScanLine, permissions: ['sell'] },
   {
     to: '/floor',
     label: 'Floor',
@@ -219,7 +223,8 @@ export function AppShell() {
   const visible = useCallback(
     (entries: NavEntry[]) =>
       entries.filter((entry) => {
-        if (!entry.permissions.some((permission) => can(permission))) return false
+        // An empty list means everyone.
+        if (entry.permissions.length > 0 && !entry.permissions.some((permission) => can(permission))) return false
         if (!entry.modes) return true
         // A company with no outlets configured yet sees everything, or a new
         // shop has nowhere to start.

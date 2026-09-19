@@ -213,14 +213,18 @@ export default function Till() {
     // on the screen, which is exactly what a freshly set-up company sees.
     const noTillsExist = (posSession?.terminals.length ?? 0) === 0
 
+    // The onboarding itself lives on the home screen, which has the room for
+    // it and the state to decide what the next step actually is. This is the
+    // guard for someone who arrived at /till directly, and it points there
+    // rather than repeating the same explanation in a second place.
     if (noTillsExist) {
       return (
         <Notice tone="info" title="No till has been set up yet">
-          A till is the counter this browser is standing at — the drawer, the shift and the receipts are all recorded
-          against one, so selling cannot start until there is one.{' '}
+          A sale is recorded against a till, so there is nothing to sell from yet.{' '}
           {can('terminal.manage') ? (
             <>
-              Create an outlet and its first till in <Link to="/setup">Setup</Link>.
+              Create an outlet and its first till in <Link to="/setup">Setup</Link>, or start from the{' '}
+              <Link to="/">home screen</Link>.
             </>
           ) : (
             <>Ask whoever administers POS to add one in Setup.</>
@@ -231,8 +235,8 @@ export default function Till() {
 
     return (
       <Notice tone="info" title="Which till is this?">
-        Choose the till at the top of the page. Everything a till does — the drawer, the shift, the receipts — is
-        recorded against it, so it has to be picked before selling.
+        Choose the till at the top of the page, or pick one on the <Link to="/">home screen</Link>. Everything a till
+        does — the drawer, the shift, the receipts — is recorded against it, so it has to be picked before selling.
       </Notice>
     )
   }
