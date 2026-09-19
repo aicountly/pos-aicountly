@@ -195,3 +195,100 @@ export function Freshness({ at, refreshing }: { at: Date | null; refreshing: boo
     </span>
   )
 }
+
+/**
+ * The intelligence strip across the top of an operations board.
+ *
+ * WHAT IT IS CALLED MATTERS. The strip is headed "Operations pulse" and
+ * carries a **Rule-based** badge, because every line in it is a threshold
+ * crossed in POS' own rows — a count, a comparison, an hour-of-day aggregate.
+ * The heading and the badge both switch to "AI" the day `block.ai.available`
+ * turns true and a model actually writes these lines; until then, calling a
+ * SQL `COUNT(*)` an AI insight is how people stop believing the badge on the
+ * day it means something.
+ *
+ * Nothing about the layout changes when that happens. The computation is
+ * behind one field, which is the whole point of putting it there.
+ */
+export function PulseStrip({
+  block,
+  onOpen,
+  openLabel = 'View insights',
+  loading = false,
+}: {
+  block: InsightBlock | null
+  onOpen?: () => void
+  openLabel?: string
+  loading?: boolean
+}) {
+  const modelWritten = block?.ai.available === true
+
+  if (loading) {
+    return (
+      <div className="pos-pulse pos-pulse--loading" role="status" aria-live="polite">
+        <span className="pos-pulse__icon" aria-hidden>
+          <SparkMark />
+        </span>
+        <span className="pos-pulse__message pos-muted">Reading the counters…</span>
+      </div>
+    )
+  }
+
+  if (!block) return null
+
+  const items = block.items
+
+  return (
+    <section className="pos-pulse" aria-label={modelWritten ? 'AI pulse' : 'Operations pulse'}>
+      <div className="pos-pulse__content">
+        <span className="pos-pulse__icon" aria-hidden>
+          <SparkMark />
+        </span>
+
+        <p className="pos-pulse__message">
+          <strong>{modelWritten ? 'AI pulse:' : 'Operations pulse:'}</strong>{' '}
+          {items.length === 0 ? (
+            <span className="pos-pulse__quiet">
+              Nothing has crossed a threshold in this period. Nothing is being hidden — there is nothing to say.
+            </span>
+          ) : (
+            items.map((item, index) => (
+              <span key={item.id} className="pos-pulse__item">
+                {index > 0 && <span className="pos-pulse__separator" aria-hidden> · </span>}
+                <span
+                  className={`pos-pulse__dot pos-pulse__dot--${item.severity ?? 'info'}`}
+                  aria-hidden
+                />
+                {item.title}
+              </span>
+            ))
+          )}
+        </p>
+
+        {/* The badge is not decoration. It is the difference between a number
+            a rule found and a sentence a model wrote. */}
+        <span className="pos-pulse__kind" title={block.ai.note}>
+          {modelWritten ? 'AI' : 'Rule-based'}
+        </span>
+      </div>
+
+      {onOpen && (
+        <button type="button" className="pos-pulse__link" onClick={onOpen}>
+          {openLabel} <span aria-hidden>→</span>
+        </button>
+      )}
+    </section>
+  )
+}
+
+function SparkMark() {
+  return (
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden focusable="false">
+      <path
+        d="M8 1.2 9.5 5.6 14 7.1 9.5 8.6 8 13l-1.5-4.4L2 7.1l4.5-1.5z"
+        fill="currentColor"
+      />
+      <path d="M13 1.5 13.6 3.2 15.3 3.8 13.6 4.4 13 6.1 12.4 4.4 10.7 3.8 12.4 3.2z" fill="currentColor" opacity=".7" />
+    </svg>
+  )
+}

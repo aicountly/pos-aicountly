@@ -1693,6 +1693,114 @@ check('an outlet id belonging to another company is a 404, not an empty board', 
     );
 });
 
+check('the retail command centre measures checkout and refuses to invent a queue', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 2000.0);
+
+    $carts = new CartService($ctx, $auth);
+    for ($i = 0; $i < 3; $i++) {
+        $cart = seedCart($ctx, $auth, $terminalId, $sessionId);
+        (new CheckoutService($ctx, $auth))->checkout((int) $cart['cart_id'], [
+            'payments' => [['payment_mode' => 'cash', 'amount' => (float) $cart['total_amount']]],
+        ]);
+    }
+    // One cart voided before payment, which is the only abandonment POS sees,
+    // and one left open on the counter.
+    $voided = $carts->open(['terminal_id' => $terminalId, 'session_id' => $sessionId, 'order_kind' => 'retail']);
+    $carts->void((int) $voided['cart_id'], ['reason' => 'Customer changed their mind']);
+    $carts->open(['terminal_id' => $terminalId, 'session_id' => $sessionId, 'order_kind' => 'retail']);
+
+    $board = (new RetailBoard(dashboardWindow($ctx, $auth)))->build();
+    $health = $board['checkout_health'];
+
+    assertSame(false, $health['wait']['available'], 'no waiting time is reported');
+    assertSame('not_observed', $health['wait']['reason'], 'and the reason is that nothing observes a queue');
+    assertTrue(!array_key_exists('minutes', $health['wait']), 'the figure is absent, not zeroed');
+
+    assertSame(3, $health['completion']['completed'], 'three bills were paid for');
+    assertSame(1, $health['completion']['voided'], 'one was voided before payment');
+    assertSame(5, $health['completion']['started'], 'five carts were opened in the window');
+    assertSame(20.0, $health['abandonment']['rate_pc'], 'one of the five carts opened walked away');
+    assertSame(1, $health['on_counter']['carts'], 'and one is still sitting on the counter');
+});
+
+check('nothing on the retail board is badged as an AI insight while no model is configured', function () use ($ctx, $auth) {
+    $board = (new RetailBoard(dashboardWindow($ctx, $auth)))->build();
+
+    assertSame(false, $board['pulse']['ai']['available'], 'the pulse strip says no model wrote it');
+    foreach ($board['pulse']['items'] as $item) {
+        assertSame('rule', $item['kind'], 'every pulse item is a rule: ' . $item['title']);
+    }
+    assertSame('rule', $board['alerts']['kind'], 'and so is every operational alert');
+    foreach ($board['alerts']['items'] as $alert) {
+        assertSame('rule', $alert['kind'], 'alert kind: ' . $alert['title']);
+    }
+});
+
+check('the retail trend buckets a single day by hour and a range by day', function () use ($ctx, $auth) {
+    $day = (new RetailBoard(dashboardWindow($ctx, $auth)))->build();
+    assertSame('hour', $day['trend']['bucket'], 'one day is bucketed by hour');
+    assertTrue($day['trend']['points'] !== [], 'and has the hours that took money');
+
+    $range = (new RetailBoard(dashboardWindow($ctx, $auth, [
+        'from' => gmdate('Y-m-d', strtotime('-6 days')), 'to' => gmdate('Y-m-d'),
+    ])))->build();
+    assertSame('day', $range['trend']['bucket'], 'a week is bucketed by day');
+    assertSame(7, count($range['trend']['points']), 'with a point for every day in the window, zeros included');
+
+    // Gross margin is NOT on the metric list: unit cost belongs to Inventory
+    // and a margin from the counter price alone would be a guess.
+    $keys = array_column($day['trend']['metrics'], 'key');
+    assertTrue(!in_array('gross_margin', $keys, true), 'no margin metric is offered on this board');
+});
+
+check('categories say which product owns the grouping rather than drawing an empty ring', function () use ($ctx, $auth) {
+    // The seeded lines carry Inventory item ids and no POS menu item, and the
+    // stub answers items without a group, so nothing can be placed.
+    $board = (new RetailBoard(dashboardWindow($ctx, $auth)))->build();
+
+    assertSame(false, $board['categories']['available'], 'the panel does not claim a breakdown it could not build');
+    assertSame('no_grouping', $board['categories']['reason'], 'and says why');
+    assertSame([], $board['categories']['rows'], 'with no invented categories');
+    assertTrue($board['categories']['total'] > 0, 'while still reporting what the period actually took');
+    assertTrue(
+        str_contains($board['categories']['note'], 'does not keep its own grouping'),
+        'and names the product that owns item grouping',
+    );
+});
+
+check('shift readiness counts only checks this product actually keeps', function () use ($ctx, $auth) {
+    $board = (new RetailBoard(dashboardWindow($ctx, $auth)))->build();
+    $readiness = $board['readiness'];
+
+    assertSame(true, $readiness['available'], 'there is a till to be ready');
+    foreach ($readiness['checks'] as $check) {
+        assertTrue($check['of'] > 0, 'a check that applies to nothing is not shown: ' . $check['key']);
+        assertTrue($check['ready'] <= $check['of'], 'no check is more than complete: ' . $check['key']);
+    }
+
+    $keys = array_column($readiness['checks'], 'key');
+    assertTrue(!in_array('paper', $keys, true), 'there is no paper-roll check, because nothing measures paper');
+    assertTrue(in_array('printer', $keys, true), 'the printer row is about configuration and is present');
+    assertTrue($readiness['percent'] >= 0 && $readiness['percent'] <= 100, 'the ring is a percentage');
+});
+
+check('the exceptions comparison is windowed against windowed, never against a running total', function () use ($ctx, $auth) {
+    $board = (new RetailBoard(dashboardWindow($ctx, $auth, ['compare' => 'previous'])))->build();
+
+    assertTrue($board['comparison'] !== null, 'a comparison was asked for and built');
+    assertSame(
+        $board['kpis']['exceptions'] - $board['attention']['stuck'],
+        $board['kpis']['exceptions_windowed'],
+        'the windowed count is the headline minus the sales stuck on every date',
+    );
+    assertTrue(
+        array_key_exists('exceptions_windowed', $board['comparison']),
+        'and the comparison offers the same measure to compare it with',
+    );
+});
+
 echo "\nData ownership (release-blocking)\n";
 
 /** @return list<string> */

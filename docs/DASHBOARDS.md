@@ -134,6 +134,63 @@ silently inheriting one of the two.
 A drawer nobody has counted has `counted_cash: null` and `variance: null`. The
 screen renders "Not counted yet", never a zero.
 
+## Retail Operations, panel by panel
+
+One request — `GET v1/dashboards/retail` — returns the whole board, so every
+panel on screen is the same snapshot rather than nine widgets racing each
+other. It refreshes every 45 seconds while the tab is visible, stops entirely
+when it is hidden, and catches up once on return; Refresh invalidates it by
+hand.
+
+| Block | Panel | Built from |
+|---|---|---|
+| `kpis` | the five metric cards | `pos_carts`, `pos_terminals`, `pos_register_sessions` |
+| `comparison` | the trend badges on those cards | the same aggregates over the comparison window |
+| `trend` | Hourly sales trend | completed carts bucketed by hour (one day) or day (a range), in the outlet's timezone |
+| `counters` | Live counter status | one row per active till, with its shift, its open carts and its rate |
+| `checkout_health` | Queue & checkout health | see the queue gap below |
+| `categories` | Top selling categories | POS menu categories, then Inventory's item groups for the rest |
+| `alerts` | Operational alerts | posting, offline, drawer variances, aging holds, void rate, quiet tills, Inventory's answer |
+| `readiness` | Shift readiness | shifts open, opening floats, printers configured, devices registered, drawers awaiting sign-off |
+| `pulse` | Operations pulse | the two worst alerts, the sales swing, the usual busiest hour |
+
+**Trend badges are coloured by intent, not by direction.** A rise in completed
+bills is good and a rise in median checkout is not, so `MetricTrend` carries
+`intent` separately from `direction`. Bills on hold and active counters carry
+no badge at all: both are right-now figures that ignore the date filter, and
+there is no previous value to compare them against. "Needs attention" compares
+`exceptions_windowed` with the same measure over the comparison window, because
+the headline count also carries sales stuck on every date.
+
+**Counter state** is one of `busy` (a cart is open on it), `open`, `idle` (a
+shift is open and nothing has been rung up for 45 minutes — only ever said
+about a window that includes now), `closing`, or `closed`. There is no
+`offline` state: a till that is not talking to us cannot tell us so, and is
+indistinguishable from one that is quiet.
+
+**Cashier names.** POS stores the sign-on identifier, not a directory. The
+signed-in person sees their own name; everyone else is shown by the shortened
+identifier their shift was opened with, with the whole of it in the tooltip.
+
+**Category grouping is not POS'.** POS owns the menu's categories and nothing
+else — a scanned item's group belongs to Inventory. The board reads the menu
+category where the line has one, asks Inventory live (one bulk call, never one
+per line) for the rest, and reports `coverage_pc` for how much of the period it
+could place. When it can place none it returns `available: false,
+reason: no_grouping` and says which product owns the answer.
+
+**Shift readiness has no paper check.** Nothing here knows how much paper is in
+a till. The row says whether a printer was *configured*, which is the fact POS
+has. Each check reports `ready` of `of`, checks that apply to nothing are
+dropped, and the ring is the share of the rest that pass — so the percentage
+cannot be inflated by a check the shop does not use.
+
+**Export** writes CSV of what the board already fetched, gated on
+`reports.view`. There is no PDF or spreadsheet writer in this product and
+adding one to put four tables in a file would be a large dependency for a small
+job; the menu offers what actually works rather than three items where two
+produce a CSV under the wrong extension.
+
 ## What these boards deliberately will not say
 
 Each of these is a place where the obvious thing to draw would be a lie.
@@ -162,6 +219,23 @@ next to it. Bills recorded in under a second are excluded: `created_at` is
 written by PostgreSQL at microsecond precision and `updated_at` by PHP at second
 precision, so their difference is meaningless below a second.
 
+The Retail board's **Queue & checkout health** panel is built around that gap
+rather than papering over it. `checkout_health.wait` is always
+`available: false, reason: not_observed`, and the three figures beside it are
+ones the counter really produces:
+
+| Shown | Is |
+|---|---|
+| Slowest 1 in 10 | P90 of cart-open to cart-complete, same exclusions as the median |
+| Paid for | completed ÷ (completed + voided) over carts opened in the window |
+| Walked away | voided-before-payment ÷ carts opened — the only abandonment POS can see |
+
+The counter table's **On counter** column is carts `OPEN` or `HELD` on that
+till right now. It is not headed "Queue" and the panel's footnote says why.
+
+*What would close this gap:* a device that counts people — a ticket dispenser, a
+door sensor, a camera — with a per-outlet feed POS could read live.
+
 **No loyalty.** There is no points table, no tier and no liability in this
 product, and none is read from another. The panel says so and does not show a
 zero — a zero reads as "no customer has any points", which is a different and
@@ -179,6 +253,15 @@ badged **Rule-based alert**. There are no confidence percentages anywhere,
 because nothing here produces one. When a POS-owned model integration lands
 through Console's central key arrangement, it adds items badged **AI suggestion**
 alongside these — it does not relabel them.
+
+That applies to the Retail board's strip too. It is headed **Operations pulse**
+with a **Rule-based** badge, never "AI Pulse", and both the heading and the
+badge flip the day `pulse.ai.available` turns true. The strip's contents are
+the two worst open alerts, the swing against the comparison window, and the
+hour this outlet is usually busiest — the last from a 28-day aggregate of its
+own completed bills, offered only while the chosen window is still running and
+only with at least 20 bills over 5 trading days behind it. It is labelled a
+pattern in the rows, not a forecast.
 
 **No marketplace channels.** Order channels lists only what this outlet has
 actually taken an order through, and says how many external connectors are

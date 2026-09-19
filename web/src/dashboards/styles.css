@@ -801,3 +801,866 @@
     animation: none !important;
   }
 }
+
+/* ==========================================================================
+   The operations command centre
+   --------------------------------------------------------------------------
+   Everything below is still inside .pos-workspace and still built from the
+   tokens at the top of this file. The two greens are the ones index.css
+   defines and for the same reason: --pos-brand is the decorative one and
+   --pos-action is the one that is safe under white text.
+
+   The extra hues exist because five KPI cards that are all green stop telling
+   the manager anything. Each is a tint plus a text colour that passes on it,
+   and every one of them is paired with a word — no state on this board is
+   carried by colour alone.
+   ========================================================================== */
+
+.pos-workspace {
+  --pos-tone-green: var(--success, #216f13);
+  --pos-tone-green-soft: var(--brand-soft, #edf8e9);
+  --pos-tone-blue: var(--info, #315dab);
+  --pos-tone-blue-soft: var(--info-bg, #edf3ff);
+  --pos-tone-orange: var(--warning, #805500);
+  --pos-tone-orange-soft: var(--warning-bg, #fff4dc);
+  --pos-tone-purple: #6b3fbe;
+  --pos-tone-purple-soft: #f3ecfd;
+  --pos-tone-red: var(--danger, #aa2929);
+  --pos-tone-red-soft: var(--danger-bg, #ffeded);
+  --pos-line-soft: #edf1ee;
+}
+
+/* --------------------------------------------------------------------------
+   Hero
+   -------------------------------------------------------------------------- */
+
+.pos-page-header--hero {
+  padding: 4px 0 2px;
+}
+
+.pos-page-header__copy { min-width: 0; }
+
+/*
+ * The mark and the line beside the heading.
+ *
+ * Both are ornament. They are the first things to go as the viewport narrows,
+ * because the heading and the two buttons are the parts of this header anybody
+ * needs.
+ */
+.pos-hero__aside {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.pos-hero__art {
+  width: 104px;
+  height: auto;
+  flex: 0 0 auto;
+  stroke: var(--pos-brand);
+  opacity: 0.4;
+}
+
+.pos-hero__art--screen { fill: var(--pos-soft-green); }
+
+.pos-hero__quote {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 2px solid var(--brand-line, #cfe7c6);
+  color: var(--pos-action);
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.pos-glyph { width: 15px; height: 15px; flex: 0 0 auto; }
+.pos-glyph--spin { animation: pos-spin 900ms linear infinite; }
+
+@keyframes pos-spin {
+  to { rotate: 360deg; }
+}
+
+/* --------------------------------------------------------------------------
+   The pulse strip
+   -------------------------------------------------------------------------- */
+
+.pos-pulse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  margin-bottom: 14px;
+  padding: 8px 14px;
+  border: 1px solid var(--brand-line, #cfe7c6);
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(237, 248, 233, 0.95), rgba(246, 251, 244, 0.7));
+}
+
+.pos-pulse--loading { justify-content: flex-start; }
+
+.pos-pulse__content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pos-pulse__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background: rgba(33, 111, 19, 0.11);
+  color: var(--pos-action);
+}
+
+.pos-pulse__message {
+  margin: 0;
+  min-width: 0;
+  color: #27502c;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.pos-pulse__message strong { color: var(--pos-action); }
+.pos-pulse__item { white-space: normal; }
+.pos-pulse__separator { opacity: 0.45; }
+.pos-pulse__quiet { color: var(--pos-muted); }
+
+/* A severity dot, always next to the words it describes — never instead. */
+.pos-pulse__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--pos-tone-blue);
+}
+
+.pos-pulse__dot--danger { background: var(--pos-tone-red); }
+.pos-pulse__dot--warning { background: #c07d00; }
+.pos-pulse__dot--success { background: var(--pos-tone-green); }
+
+.pos-pulse__kind {
+  padding: 3px 8px;
+  border: 1px solid var(--brand-line, #cfe7c6);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--pos-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.pos-pulse__link {
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--pos-action);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pos-pulse__link:hover { text-decoration: underline; }
+
+/* --------------------------------------------------------------------------
+   Filter toolbar
+   -------------------------------------------------------------------------- */
+
+.pos-filterbar {
+  align-items: flex-end;
+  padding: 12px 14px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+}
+
+.pos-filterbar__controls { align-items: flex-end; }
+.pos-filterbar__freshness { text-align: right; }
+
+.pos-segmented { display: inline-flex; gap: 6px; }
+
+.pos-segmented button {
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pos-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.pos-segmented button:hover { background: #f4f8f4; }
+
+.pos-segmented button[aria-pressed='true'] {
+  border-color: var(--brand-line, #cfe7c6);
+  background: var(--pos-soft-green);
+  color: var(--pos-action);
+}
+
+/*
+ * The comparison switch.
+ *
+ * A real checkbox, positioned under the track rather than replaced by one:
+ * the focus ring, the space bar and the accessibility tree all keep working,
+ * which is not true of a div with a click handler.
+ */
+.pos-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  color: var(--pos-text);
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.pos-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  opacity: 0;
+}
+
+.pos-switch__track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 1px solid var(--pos-border);
+  border-radius: 999px;
+  background: #eef2ef;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.pos-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(18, 35, 24, 0.25);
+  transition: translate 140ms ease;
+}
+
+.pos-switch input:checked + .pos-switch__track {
+  border-color: var(--pos-action);
+  background: var(--pos-action);
+}
+
+.pos-switch input:checked + .pos-switch__track::after { translate: 16px 0; }
+.pos-switch input:focus-visible + .pos-switch__track { outline: 3px solid var(--pos-action); outline-offset: 3px; }
+
+/* A menu that hangs off a button — export, and the chart's metric picker. */
+.pos-menu { position: relative; display: inline-block; }
+
+.pos-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--pos-border);
+  border-radius: 12px;
+  background: var(--pos-surface);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+}
+
+.pos-menu__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pos-text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pos-menu__item:hover { background: var(--surface-2, #f6f9f6); }
+.pos-menu__item[aria-current='true'] { background: var(--pos-soft-green); color: var(--pos-action); font-weight: 700; }
+
+.pos-select-compact {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--pos-border);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--pos-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+@media (pointer: coarse) {
+  .pos-select-compact { min-height: 44px; }
+}
+
+/* --------------------------------------------------------------------------
+   KPI cards
+   -------------------------------------------------------------------------- */
+
+.pos-metrics { gap: 12px; }
+
+.pos-metric {
+  gap: 7px;
+  padding: 16px;
+  border-radius: var(--pos-radius-md, 14px);
+}
+
+.pos-metric__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.pos-metric__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--surface-2, #f4f7f5);
+  color: var(--pos-muted);
+}
+
+.pos-metric__icon svg { width: 17px; height: 17px; }
+
+.pos-metric__icon--green { background: var(--pos-tone-green-soft); color: var(--pos-tone-green); }
+.pos-metric__icon--blue { background: var(--pos-tone-blue-soft); color: var(--pos-tone-blue); }
+.pos-metric__icon--orange { background: var(--pos-tone-orange-soft); color: var(--pos-tone-orange); }
+.pos-metric__icon--purple { background: var(--pos-tone-purple-soft); color: var(--pos-tone-purple); }
+.pos-metric__icon--red { background: var(--pos-tone-red-soft); color: var(--pos-tone-red); }
+
+/*
+ * The trend badge is coloured by INTENT, not by direction.
+ *
+ * `--good` and `--bad` rather than `--up` and `--down`: a checkout that got
+ * slower is up and bad, and a void count that fell is down and good.
+ */
+.pos-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.pos-trend--good { background: var(--success-bg, #edf8e9); color: var(--success, #216f13); }
+.pos-trend--bad { background: var(--danger-bg, #ffeded); color: var(--danger, #aa2929); }
+.pos-trend--neutral { background: #eef2ef; color: #526259; }
+
+.pos-metric__bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 2px;
+  min-height: 22px;
+}
+
+.pos-metric__bottom .pos-muted { font-size: 11.5px; }
+
+.pos-metric--skeleton { cursor: default; box-shadow: none; }
+
+/* --------------------------------------------------------------------------
+   Sparklines, meters, donuts
+   -------------------------------------------------------------------------- */
+
+.pos-spark { flex: 0 0 auto; overflow: visible; }
+.pos-spark__line { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.pos-spark__area { fill: currentColor; opacity: 0.11; stroke: none; }
+.pos-spark__tip { fill: currentColor; }
+
+.pos-spark--brand { color: var(--pos-brand); }
+.pos-spark--blue { color: var(--pos-tone-blue); }
+.pos-spark--orange { color: #c07d00; }
+.pos-spark--purple { color: var(--pos-tone-purple); }
+.pos-spark--red { color: var(--pos-tone-red); }
+
+.pos-meter {
+  width: 58px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e8eee9;
+  overflow: hidden;
+}
+
+.pos-meter__fill { height: 100%; border-radius: 999px; background: var(--pos-brand); }
+
+.pos-donut { display: flex; justify-content: center; }
+.pos-donut svg { overflow: visible; }
+.pos-donut__value { font-size: 15px; font-weight: 800; fill: var(--pos-text); }
+.pos-donut__caption { font-size: 9.5px; fill: var(--pos-muted); }
+
+/*
+ * Six wedge colours, ordered so that adjacent ones differ in lightness as well
+ * as hue. The legend carries the figure beside every label, so nobody has to
+ * match a wedge to a name by colour to read the panel.
+ */
+.pos-donut__slice--0 { stroke: #1f8a3b; }
+.pos-donut__slice--1 { stroke: #6fc05a; }
+.pos-donut__slice--2 { stroke: #2f6fd0; }
+.pos-donut__slice--3 { stroke: #e0a93b; }
+.pos-donut__slice--4 { stroke: #7f4fd2; }
+.pos-donut__slice--5 { stroke: #9aa8a0; }
+
+.pos-donut__key--0 { background: #1f8a3b; }
+.pos-donut__key--1 { background: #6fc05a; }
+.pos-donut__key--2 { background: #2f6fd0; }
+.pos-donut__key--3 { background: #e0a93b; }
+.pos-donut__key--4 { background: #7f4fd2; }
+.pos-donut__key--5 { background: #9aa8a0; }
+
+/* --------------------------------------------------------------------------
+   Chart tooltip
+   -------------------------------------------------------------------------- */
+
+.pos-chart__plot { position: relative; }
+.pos-chart__hit { fill: transparent; cursor: crosshair; }
+.pos-chart__crosshair { stroke: var(--pos-brand); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.55; }
+
+.pos-chart__tooltip {
+  position: absolute;
+  z-index: 3;
+  translate: -50% calc(-100% - 12px);
+  display: grid;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 1px solid var(--pos-border);
+  border-radius: 9px;
+  background: var(--pos-surface);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.pos-chart__tooltip--below { translate: -50% 14px; }
+
+.pos-chart__tooltip strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+.pos-chart__tooltip span { color: var(--pos-muted); font-size: 11px; }
+.pos-chart__tooltip-compare { font-size: 10.5px !important; }
+
+/* --------------------------------------------------------------------------
+   Live counter table
+   -------------------------------------------------------------------------- */
+
+/*
+ * Five columns in a card that is a third of the page.
+ *
+ * The headers wrap rather than forcing their column to the width of
+ * "On counter" on one line, and the meta line under a counter code is clipped
+ * rather than allowed to set the column width. Both are what keep this table
+ * on screen at 1280 instead of inside a sideways scroller.
+ */
+.pos-counter-table { font-size: 12px; }
+.pos-counter-table td,
+.pos-counter-table th { padding: 9px 6px; }
+.pos-counter-table th { white-space: normal; line-height: 1.3; }
+
+.pos-counter-table td:first-child,
+.pos-counter-table th:first-child { padding-left: 2px; }
+
+.pos-counter-table td:last-child,
+.pos-counter-table th:last-child { padding-right: 2px; }
+
+.pos-counter-table tbody tr { cursor: pointer; }
+.pos-counter-table tbody tr[aria-selected='true'] { background: var(--pos-soft-green); }
+
+.pos-counter-table .pos-counter-row__button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pos-counter-row__meta {
+  display: block;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pos-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+/* Initials, because POS has no name for another cashier's uuid — only their
+   own. The full identifier is in the cell's title attribute. */
+.pos-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--pos-soft-green);
+  color: var(--pos-action);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.pos-cashier { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.pos-cashier__name { max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pos-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eef2ef;
+  color: #526259;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-pill--busy { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+.pos-pill--calm { background: var(--success-bg, #edf8e9); color: var(--success, #216f13); }
+
+.pos-showmore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pos-action);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pos-showmore:hover { text-decoration: underline; }
+
+/* --------------------------------------------------------------------------
+   Checkout health
+   -------------------------------------------------------------------------- */
+
+.pos-health {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: 14px;
+}
+
+.pos-health__metric {
+  min-width: 0;
+  padding: 2px 12px;
+  border-right: 1px solid var(--pos-line-soft);
+}
+
+.pos-health__metric:first-child { padding-left: 0; }
+.pos-health__metric:last-child { border-right: 0; padding-right: 0; }
+
+.pos-health__label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--pos-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.pos-health__value {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 20px;
+  line-height: 1.1;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.pos-health__note { color: var(--pos-muted); font-size: 11px; }
+
+.pos-verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--brand-line, #cfe7c6);
+  border-radius: 11px;
+  background: #f2faf1;
+  color: #2c5730;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.pos-verdict p { margin: 0; }
+.pos-verdict__icon { flex: 0 0 auto; color: var(--pos-action); margin-top: 1px; }
+.pos-verdict--moderate { border-color: #e8dcb6; background: #fffbf1; color: #6a4e0d; }
+.pos-verdict--moderate .pos-verdict__icon { color: var(--warning, #805500); }
+.pos-verdict--high { border-color: #edd0ad; background: #fff8ee; color: #7a4a10; }
+.pos-verdict--high .pos-verdict__icon { color: var(--warning, #805500); }
+.pos-verdict--critical { border-color: #f0c9c9; background: #fff6f6; color: #8a2626; }
+.pos-verdict--critical .pos-verdict__icon { color: var(--danger, #aa2929); }
+.pos-verdict--unknown { border-color: var(--pos-border); background: var(--surface-2, #fbfcfb); color: var(--pos-muted); }
+.pos-verdict--unknown .pos-verdict__icon { color: var(--pos-muted); }
+
+/* --------------------------------------------------------------------------
+   Category legend
+   -------------------------------------------------------------------------- */
+
+.pos-category {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.pos-category__legend { display: grid; gap: 9px; min-width: 0; }
+
+.pos-category__row {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+}
+
+.pos-category__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-category__share { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+
+/* --------------------------------------------------------------------------
+   Operational alerts
+   -------------------------------------------------------------------------- */
+
+.pos-alerts { display: grid; gap: 2px; }
+
+.pos-alert {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--pos-line-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.pos-alert:last-child { border-bottom: 0; }
+a.pos-alert:hover { background: var(--surface-2, #f8faf8); }
+
+.pos-alert__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #eef2ef;
+  color: #526259;
+}
+
+.pos-alert__icon svg { width: 14px; height: 14px; }
+.pos-alert--critical .pos-alert__icon { background: var(--pos-tone-red-soft); color: var(--pos-tone-red); }
+.pos-alert--warning .pos-alert__icon { background: var(--pos-tone-orange-soft); color: var(--pos-tone-orange); }
+.pos-alert--info .pos-alert__icon { background: var(--pos-tone-blue-soft); color: var(--pos-tone-blue); }
+
+.pos-alert__title { display: block; font-size: 12.5px; font-weight: 650; }
+.pos-alert__context { display: block; margin-top: 2px; color: var(--pos-muted); font-size: 11.5px; line-height: 1.5; }
+.pos-alert__at { color: var(--pos-muted); font-size: 11px; white-space: nowrap; padding-top: 1px; }
+
+/* --------------------------------------------------------------------------
+   Shift readiness
+   -------------------------------------------------------------------------- */
+
+.pos-readiness {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.pos-readiness__ring { display: grid; place-items: center; }
+.pos-readiness__ring svg { width: 96px; height: 96px; }
+.pos-readiness__track { stroke: #e8eee9; }
+.pos-readiness__value { stroke: var(--pos-brand); }
+.pos-readiness__pc { font-size: 19px; font-weight: 800; fill: var(--pos-text); }
+.pos-readiness__of { font-size: 9px; fill: var(--pos-muted); }
+
+.pos-readiness__checks { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+
+.pos-readiness__check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--pos-text);
+}
+
+.pos-readiness__check span:last-child { color: var(--pos-muted); font-variant-numeric: tabular-nums; }
+.pos-readiness__mark { display: inline-grid; place-items: center; width: 16px; height: 16px; }
+.pos-readiness__mark svg { width: 15px; height: 15px; }
+.pos-readiness__mark--done { color: var(--success, #216f13); }
+.pos-readiness__mark--part { color: var(--warning, #805500); }
+.pos-readiness__mark--none { color: var(--pos-muted); }
+
+/* --------------------------------------------------------------------------
+   Widget states
+   -------------------------------------------------------------------------- */
+
+.pos-widget-error {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 14px 16px;
+  border: 1px solid #f0d3d3;
+  border-radius: 12px;
+  background: #fff8f8;
+  color: var(--pos-text);
+  font-size: 13px;
+}
+
+.pos-widget-error p { margin: 0; }
+
+.pos-empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 18px 16px;
+  border: 1px dashed var(--pos-border);
+  border-radius: 12px;
+  background: var(--surface-2, #fbfcfb);
+  font-size: 13px;
+}
+
+.pos-empty p { margin: 0; color: var(--pos-muted); font-size: 12.5px; line-height: 1.55; }
+.pos-empty .pos-actions { margin-top: 4px; }
+
+.pos-skeleton { display: grid; gap: 10px; width: 100%; }
+
+.pos-skeleton__bar {
+  display: block;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #eef2ef 25%, #f6f9f6 37%, #eef2ef 63%);
+  background-size: 400% 100%;
+  animation: pos-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes pos-shimmer {
+  from { background-position: 100% 50%; }
+  to { background-position: 0 50%; }
+}
+
+/* --------------------------------------------------------------------------
+   The operations layout
+   --------------------------------------------------------------------------
+   Every track states a zero minimum, for the reason at .pos-dashboard-content:
+   a grid item's automatic minimum is min-content, and one wide table with an
+   `auto` track scrolls the entire page sideways.
+   -------------------------------------------------------------------------- */
+
+.pos-grid-ops {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.3fr) minmax(0, 1.05fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.pos-grid-ops--secondary {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr) minmax(0, 0.95fr);
+}
+
+@media (max-width: 1400px) {
+  .pos-grid-ops,
+  .pos-grid-ops--secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-grid-ops > :last-child,
+  .pos-grid-ops--secondary > :last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 1300px) {
+  .pos-hero__quote { display: none; }
+}
+
+@media (max-width: 1100px) {
+  .pos-hero__aside { display: none; }
+}
+
+@media (max-width: 900px) {
+  .pos-grid-ops,
+  .pos-grid-ops--secondary { grid-template-columns: minmax(0, 1fr); }
+  .pos-grid-ops > :last-child,
+  .pos-grid-ops--secondary > :last-child { grid-column: auto; }
+  .pos-category { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .pos-category__legend { width: 100%; }
+}
+
+@media (max-width: 720px) {
+  .pos-pulse { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .pos-pulse__link { align-self: flex-start; }
+  .pos-filterbar { padding: 12px; }
+  .pos-filterbar__freshness { text-align: left; }
+  .pos-health { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .pos-health__metric { padding: 0 0 9px; border-right: 0; border-bottom: 1px solid var(--pos-line-soft); }
+  .pos-health__metric:last-child { border-bottom: 0; padding-bottom: 0; }
+  .pos-readiness { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
+  .pos-readiness__ring { justify-self: center; }
+  .pos-segmented { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-skeleton__bar,
+  .pos-glyph--spin { animation: none !important; }
+}

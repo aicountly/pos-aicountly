@@ -8,7 +8,8 @@
  */
 
 export interface PosSession {
-  user: { uuid: string; display_name: string; kind: string }
+  /** `roles` is the label under the name in the header. Never a permission check. */
+  user: { uuid: string; display_name: string; kind: string; roles?: string[] }
   company: { cmp_id: number; fy_id: number; bo_id: number }
   permissions: string[]
   locations: Location[]

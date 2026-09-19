@@ -262,3 +262,141 @@
 @media (prefers-reduced-motion: reduce) {
   .shell-sidebar { transition: none; }
 }
+
+/* -------------------------------------------------------------------------- */
+/* The sidebar note and the signed-in block                                    */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * A standing note at the foot of the navigation.
+ *
+ * It says what the boards are for. It carries no count, no badge and no dot,
+ * because this component fetches nothing and a number here would have to be
+ * invented to exist.
+ */
+.shell-promo {
+  display: flex;
+  gap: 9px;
+  margin: 0 8px 10px;
+  padding: 12px;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--accent);
+}
+
+.shell-promo > svg { flex: 0 0 auto; margin-top: 1px; }
+.shell-promo strong { display: block; font-size: 12.5px; line-height: 1.35; }
+
+.shell-promo p {
+  margin: 4px 0 0;
+  color: #3d6b3a;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.shell-who { position: relative; }
+
+.shell-who__trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.shell-who__trigger:hover { border-color: var(--border); background: var(--surface-2); }
+
+.shell-who__avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shell-who__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.shell-who__name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.shell-who__role {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.shell-who__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 1001;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.shell-who__menu-head {
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-who__menu-head strong { display: block; font-size: 13px; }
+.shell-who__menu-head span { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+
+.shell-who__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell-who__menu-item:hover { background: var(--surface-2); }
+
+/* On a phone the header already wraps to two rows; the name goes and the
+   avatar stays, which is enough to say who is signed in. */
+@media (max-width: 700px) {
+  .shell-who__text { display: none; }
+  .shell-who__trigger { padding: 4px; }
+}

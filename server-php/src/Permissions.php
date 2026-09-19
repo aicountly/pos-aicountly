@@ -178,6 +178,46 @@ final class Permissions
     }
 
     /**
+     * The names of the POS roles this person holds, for the screen to show.
+     *
+     * Presentation only — nothing is authorised by a role NAME, and the
+     * permission list beside it is what every check reads. An owner has no
+     * assignment row at all, because ownership comes from Manage rather than
+     * from a POS profile, and gets the label that says so.
+     *
+     * @return list<string>
+     */
+    public static function roleNames(Context $ctx, Auth $auth): array
+    {
+        if ($auth->isService()) {
+            return ['Service'];
+        }
+        if ($auth->accessType() === 1) {
+            return ['Owner'];
+        }
+
+        try {
+            $rows = Db::all(
+                'SELECT p.profile_name
+                 FROM ' . self::TABLE_ASSIGNMENTS . ' a
+                 JOIN ' . self::TABLE_PROFILES . ' p ON p.profile_id = a.profile_id
+                 WHERE a.cmp_id = :cmp AND a.user_uuid = :uuid AND p.is_active = TRUE
+                 ORDER BY p.profile_name',
+                ['cmp' => $ctx->cmpId, 'uuid' => $auth->uuid],
+            );
+        } catch (\Throwable $e) {
+            error_log('[permissions] role lookup failed: ' . $e->getMessage());
+
+            return [];
+        }
+
+        return array_values(array_unique(array_map(
+            static fn (array $row): string => (string) $row['profile_name'],
+            $rows,
+        )));
+    }
+
+    /**
      * Drop the memoised grant for one caller.
      *
      * Needed because the grant is worked out once per request and an access-type

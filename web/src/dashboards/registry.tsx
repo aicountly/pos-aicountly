@@ -16,7 +16,7 @@
  * they may not see gets a 403, not a blank page.
  */
 
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { usePos } from '../context/PosContext'
 import type { Location } from '../services/types'
 import type { DashboardTab } from './shell'
@@ -121,19 +121,23 @@ export function DashboardFilterBar({
   update,
   showTerminal = true,
   showComparison = true,
+  comparisonAs = 'select',
 }: {
   filters: DashboardFilters
   update: (patch: Partial<DashboardFilters>) => void
   showTerminal?: boolean
   showComparison?: boolean
+  /** A switch on the operations boards, a select where two comparisons matter. */
+  comparisonAs?: 'select' | 'toggle'
 }) {
+  const id = useId()
   const { session } = usePos()
   const locations = session?.locations ?? []
   const terminals = (session?.terminals ?? []).filter(
     (t) => filters.locationId === null || t.location_id === filters.locationId,
   )
 
-  const activeRange = RANGES.find((range) => filters.to === filters.from && range.days === 0 && isToday(filters.from))
+  const active = activeRangeId(filters)
 
   return (
     <>
@@ -190,14 +194,13 @@ export function DashboardFilterBar({
       </label>
 
       <div className="pos-field">
-        <span>Quick range</span>
-        <div className="pos-actions">
+        <span id={`${id}-quick`}>Quick range</span>
+        <div className="pos-segmented" role="group" aria-labelledby={`${id}-quick`}>
           {RANGES.map((range) => (
             <button
               key={range.id}
               type="button"
-              className="pos-button pos-button--small"
-              aria-pressed={activeRange?.id === range.id}
+              aria-pressed={active === range.id}
               onClick={() => {
                 const to = todayString()
                 update({ from: shift(to, -range.days), to })
@@ -209,7 +212,31 @@ export function DashboardFilterBar({
         </div>
       </div>
 
-      {showComparison && (
+      {/*
+       * Two shapes of the same control.
+       *
+       * The switch is for boards where "against the period before" is the only
+       * comparison a manager reaches for; the select is for boards where the
+       * same days last week is a real question. Both write the same filter, and
+       * neither invents the window — Window::comparison decides that, and the
+       * label here says out loud which one it will be.
+       */}
+      {showComparison && comparisonAs === 'toggle' && (
+        <div className="pos-field">
+          <span>Compare</span>
+          <label className="pos-switch">
+            <input
+              type="checkbox"
+              checked={filters.compare !== 'none'}
+              onChange={(e) => update({ compare: e.target.checked ? 'previous' : 'none' })}
+            />
+            <span className="pos-switch__track" aria-hidden />
+            <span>{previousWindowLabel(filters)}</span>
+          </label>
+        </div>
+      )}
+
+      {showComparison && comparisonAs === 'select' && (
         <label className="pos-field">
           <span>Compare with</span>
           <select
@@ -226,6 +253,41 @@ export function DashboardFilterBar({
   )
 }
 
+/** Inclusive span: 2026-03-01..2026-03-01 is one day. */
+function spanDays(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00`)
+  const b = Date.parse(`${to}T00:00:00`)
+  if (Number.isNaN(a) || Number.isNaN(b)) return 1
+
+  return Math.max(1, Math.round((b - a) / 86_400_000) + 1)
+}
+
+/**
+ * What the switch will compare against, said before it is switched on.
+ *
+ * It mirrors `compare=previous` on the server exactly — the same number of
+ * days immediately before this window — so the label cannot drift away from
+ * the figures.
+ */
+function previousWindowLabel(filters: DashboardFilters): string {
+  const days = spanDays(filters.from, filters.to)
+
+  return days === 1 ? 'with the day before' : `with the previous ${days} days`
+}
+
+/**
+ * Which preset, if any, the current dates are.
+ *
+ * The old version only ever matched Today, so Last 7 days and Last 30 days
+ * never lit up however they were reached.
+ */
+function activeRangeId(filters: DashboardFilters): string | null {
+  const today = todayString()
+  if (filters.to !== today) return null
+
+  return RANGES.find((range) => filters.from === shift(today, -range.days))?.id ?? null
+}
+
 function todayString(): string {
   const now = new Date()
 
@@ -234,8 +296,4 @@ function todayString(): string {
     String(now.getMonth() + 1).padStart(2, '0'),
     String(now.getDate()).padStart(2, '0'),
   ].join('-')
-}
-
-function isToday(date: string): boolean {
-  return date === todayString()
 }

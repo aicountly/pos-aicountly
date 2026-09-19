@@ -136,7 +136,21 @@ export interface BoardState<T> {
  * `refreshing` is separate from `loading`: a manual refresh must not blank a
  * screen someone is reading, but the first load of a new scope must.
  */
-export function useBoard<T>(path: string, query: QueryParams, enabled = true): BoardState<T> {
+export function useBoard<T>(
+  path: string,
+  query: QueryParams,
+  enabled = true,
+  /**
+   * Poll this often, in milliseconds. Zero means never.
+   *
+   * Only the operational boards ask for this, and only while the tab is
+   * VISIBLE: a counter screen left open on a back tab overnight would
+   * otherwise make three thousand requests nobody reads. A hidden tab polls
+   * nothing and refetches once when it comes back, which is the behaviour a
+   * manager expects anyway — they want what is true now, not the backlog.
+   */
+  refreshMs = 0,
+): BoardState<T> {
   const scope = getScope()
   const scopeKey = scope ? `${scope.cmp_id}:${scope.fy_id}:${scope.bo_id}` : 'none'
   const queryKey = JSON.stringify(query)
@@ -203,6 +217,43 @@ export function useBoard<T>(path: string, query: QueryParams, enabled = true): B
     // contents must not refetch on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, queryKey, scopeKey, token, enabled])
+
+  useEffect(() => {
+    if (!enabled || refreshMs <= 0) return
+
+    let timer = 0
+
+    const stop = () => {
+      if (timer !== 0) {
+        window.clearInterval(timer)
+        timer = 0
+      }
+    }
+
+    const start = () => {
+      stop()
+      timer = window.setInterval(refresh, refreshMs)
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        // One immediate catch-up, then the normal cadence. Coming back to a
+        // stale counter board is worse than one extra request.
+        refresh()
+        start()
+      } else {
+        stop()
+      }
+    }
+
+    if (document.visibilityState === 'visible') start()
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [enabled, refreshMs, refresh])
 
   return { data, loading, refreshing, error, fetchedAt, refresh }
 }
