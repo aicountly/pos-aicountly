@@ -23,6 +23,7 @@ import { AppLauncher } from '../components/AppLauncher'
 import { usePos } from '../context/PosContext'
 import { outboxPending } from '../offline/db'
 import { drainOutbox, onReconnect } from '../offline/sync'
+import { readAutoSync } from '../offline/preferences'
 import { CompanyPicker } from './CompanyPicker'
 import { TerminalPicker } from './TerminalPicker'
 import './shell.css'
@@ -92,7 +93,7 @@ const WORK_NAV: NavEntry[] = [
     modes: ['restaurant', 'quick_service', 'hybrid'],
   },
   { to: '/returns', label: 'Returns', icon: RotateCcw, permissions: ['return.create'] },
-  { to: '/offline', label: 'Offline queue', icon: CloudOff, permissions: ['reports.view', 'offline.resolve'] },
+  { to: '/offline', label: 'Offline Queue', icon: CloudOff, permissions: ['reports.view', 'offline.resolve'] },
   { to: '/reports', label: 'Shift report', icon: ShoppingCart, permissions: ['reports.view'] },
   { to: '/setup', label: 'Setup', icon: SettingsIcon, permissions: ['terminal.manage'] },
 ]
@@ -131,7 +132,10 @@ function ConnectionState() {
 
     const goOnline = () => {
       setOnline(true)
-      void sync()
+      // The Offline Queue screen owns this switch; the header has to obey it
+      // too, or turning auto-posting off there does nothing the moment the
+      // connection returns. Pressing the pill still sends by hand.
+      if (readAutoSync()) void sync()
     }
     const goOffline = () => setOnline(false)
 
