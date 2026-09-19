@@ -136,7 +136,23 @@ export interface BoardState<T> {
  * `refreshing` is separate from `loading`: a manual refresh must not blank a
  * screen someone is reading, but the first load of a new scope must.
  */
-export function useBoard<T>(path: string, query: QueryParams, enabled = true): BoardState<T> {
+export function useBoard<T>(
+  path: string,
+  query: QueryParams,
+  enabled = true,
+  /**
+   * Re-fetch on this interval, in milliseconds. 0 is off, which is the default
+   * and what four of the five boards want.
+   *
+   * This reuses the existing fetch rather than adding a second live-data
+   * mechanism: there is no socket and no event bus in this product, and
+   * introducing one for a single board would leave two ways for the same screen
+   * to be wrong. The interval is deliberately slow — a restaurant floor changes
+   * over minutes, and a till on shop broadband should not be asked more often
+   * than a person would press Refresh.
+   */
+  refreshMs = 0,
+): BoardState<T> {
   const scope = getScope()
   const scopeKey = scope ? `${scope.cmp_id}:${scope.fy_id}:${scope.bo_id}` : 'none'
   const queryKey = JSON.stringify(query)
@@ -203,6 +219,25 @@ export function useBoard<T>(path: string, query: QueryParams, enabled = true): B
     // contents must not refetch on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, queryKey, scopeKey, token, enabled])
+
+  // Polling, paused while the tab is in the background: a screen nobody is
+  // looking at does not need a fresher copy, and a till left open overnight
+  // should not spend the night asking.
+  useEffect(() => {
+    if (!enabled || refreshMs <= 0) return
+
+    const tick = () => {
+      if (!document.hidden) refresh()
+    }
+
+    const id = window.setInterval(tick, refreshMs)
+    document.addEventListener('visibilitychange', tick)
+
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [enabled, refreshMs, refresh])
 
   return { data, loading, refreshing, error, fetchedAt, refresh }
 }

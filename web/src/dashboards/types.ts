@@ -258,6 +258,42 @@ export interface KitchenTicket {
   next_status: string | null
 }
 
+/**
+ * Where an order has got to, derived by the server from the order's own
+ * tickets. Not a stored column: there is nothing here to go stale against
+ * pos_kots.
+ */
+export type RestaurantOrderState =
+  | 'seated'
+  | 'placed'
+  | 'in_kitchen'
+  | 'ready'
+  | 'served'
+  | 'delayed'
+  | 'paid'
+  | 'cancelled'
+
+export interface RestaurantOrderSummary {
+  cart_id: number
+  cart_uuid: string
+  /** The token the counter calls out, or #<id> when the till issued none. */
+  reference: string
+  order_kind: string
+  table_code: string | null
+  table_session_id: number | null
+  customer_name: string | null
+  item_count: number
+  total_amount: number
+  cart_status: string
+  state: RestaurantOrderState
+  late: boolean
+  tickets: number
+  created_at: string
+  elapsed_seconds: number
+  /** Two different clocks: how long it has been running, or how long it took. */
+  elapsed_basis: 'running' | 'took'
+}
+
 export interface RestaurantBoard {
   window: WindowMeta
   kpis: {
@@ -268,9 +304,57 @@ export interface RestaurantBoard {
     tickets_pending: number
     tickets_overdue: number
     orders_ready: number
+    tickets_served: number
     unsettled_bills: number
     unsettled_value: number
   }
+  /**
+   * Whether the restaurant is serving, read from the tills rather than from a
+   * switch: POS has no open/closed control, so `changeable` is false and the
+   * screen renders a state rather than a button that would do nothing.
+   */
+  service: {
+    state: 'open' | 'closed'
+    label: string
+    open_shifts: number
+    since: string | null
+    changeable: boolean
+    note: string
+  }
+  flow: {
+    stages: Array<{
+      key: 'received' | 'in_kitchen' | 'ready' | 'served'
+      label: string
+      count: number
+      /** `live` is a state a ticket rests in now; `window` is an event inside the period. */
+      basis: 'live' | 'window'
+    }>
+    overdue: number
+    note: string
+  }
+  sales: {
+    orders: number
+    net: number
+    average_order: number | null
+    previous: { label: string; orders: number; net: number }
+    /** Null when the preceding period took nothing — "up ∞%" is not a fact. */
+    change_pc: number | null
+    basis: string
+  }
+  serve: {
+    /** False when no ticket was marked served: a gap, not a zero. */
+    available: boolean
+    reason: string | null
+    average_seconds: number | null
+    sampled: number
+    previous: { label: string; average_seconds: number | null; sampled: number }
+    change_pc: number | null
+    basis: string
+    note: string
+  }
+  /** POS collects no guest feedback. Always unavailable, never a score. */
+  rating: { available: false; reason: string; note: string; contract_gap: string }
+  orders: { items: RestaurantOrderSummary[]; note: string }
   floors: Array<{
     floor_id: number
     floor_code: string
@@ -328,6 +412,19 @@ export interface RestaurantBoard {
       late_after_seconds: number
       overdue_by_seconds: number
     }>
+  }
+  /**
+   * How much of the restaurant module exists at all.
+   *
+   * "This restaurant is quiet" and "no restaurant has been set up here" are the
+   * same zeroes and entirely different problems, and `configured` is what tells
+   * them apart.
+   */
+  setup: {
+    configured: boolean
+    steps: Array<{ key: string; label: string; count: number; done: boolean }>
+    done: number
+    total: number
   }
 }
 

@@ -1606,6 +1606,104 @@ check('the restaurant board counts a table as occupied and its ticket as late by
     assertSame('occupied', $board['floors'][0]['tables'][0]['state'], 'and the table reads occupied');
 });
 
+check('the restaurant board reports the flow, times a served ticket and says what it cannot know', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$locationId, $terminalId] = seedOutlet($ctx, 'restaurant');
+    openShift($ctx, $auth, $terminalId, 0.0);
+
+    $floorId = (int) Db::insert('pos_floors', [
+        'cmp_id' => $ctx->cmpId, 'location_id' => $locationId, 'floor_code' => 'GF', 'floor_name' => 'Ground',
+    ], 'floor_id');
+    $tableId = (int) Db::insert('pos_tables', [
+        'cmp_id' => $ctx->cmpId, 'floor_id' => $floorId, 'table_code' => 'T01', 'seats' => 4,
+    ], 'table_id');
+    Db::insert('pos_tables', [
+        'cmp_id' => $ctx->cmpId, 'floor_id' => $floorId, 'table_code' => 'T02', 'seats' => 2,
+    ], 'table_id');
+
+    // Ten minutes is this station's own patience, and the late figure is
+    // measured against it rather than against one global number.
+    $stationId = (int) Db::insert('pos_kds_stations', [
+        'cmp_id' => $ctx->cmpId, 'location_id' => $locationId, 'station_code' => 'MAIN',
+        'station_name' => 'Main kitchen', 'late_after_minutes' => 10,
+    ], 'station_id');
+
+    $tables = new TableService($ctx, $auth);
+    $tableSession = $tables->open($tableId, ['covers' => 3, 'terminal_id' => $terminalId]);
+    $tableSessionId = (int) $tableSession['table_session_id'];
+    $cartId = (int) Db::scalar(
+        "SELECT cart_id FROM pos_carts WHERE cmp_id = :cmp AND table_session_id = :sid AND status <> 'VOID' ORDER BY cart_id LIMIT 1",
+        ['cmp' => $ctx->cmpId, 'sid' => $tableSessionId],
+    );
+    $carts = new CartService($ctx, $auth);
+    $carts->addLine($cartId, ['item_id' => 101, 'quantity' => 2, 'rate' => 150, 'estimated_tax_pc' => 5]);
+    $carts->addLine($cartId, ['item_id' => 102, 'quantity' => 1, 'rate' => 90, 'estimated_tax_pc' => 5]);
+
+    // The clocks come from PostgreSQL rather than PHP so the interval the board
+    // measures is exactly the interval this test asked for.
+    $fire = static function (string $no, string $status, int $firedMinutesAgo, ?int $servedMinutesAgo) use ($ctx, $locationId, $cartId, $tableSessionId, $stationId): void {
+        Db::run(
+            "INSERT INTO pos_kots (cmp_id, fy_id, location_id, cart_id, table_session_id, station_id, kot_no, status, fired_by, fired_at, served_at)
+             VALUES (:cmp, :fy, :loc, :cart, :ts, :st, :no, :status, 'tester',
+                     NOW() - (:fired || ' minutes')::interval,
+                     CASE WHEN :served::text IS NULL THEN NULL ELSE NOW() - (:served || ' minutes')::interval END)",
+            [
+                'cmp' => $ctx->cmpId, 'fy' => $ctx->fyId, 'loc' => $locationId, 'cart' => $cartId,
+                'ts' => $tableSessionId, 'st' => $stationId, 'no' => $no, 'status' => $status,
+                'fired' => (string) $firedMinutesAgo,
+                'served' => $servedMinutesAgo === null ? null : (string) $servedMinutesAgo,
+            ],
+        );
+    };
+
+    $fire('KOT-1', 'NEW', 40, null);        // forty minutes out, ten allowed: late
+    $fire('KOT-2', 'PREPARING', 2, null);   // two minutes out: fine
+    $fire('KOT-3', 'SERVED', 30, 12);       // fired thirty ago, served twelve ago: eighteen minutes
+
+    $board = (new RestaurantBoard(dashboardWindow($ctx, $auth, ['location_id' => $locationId])))->build();
+
+    $flow = [];
+    foreach ($board['flow']['stages'] as $stage) {
+        $flow[$stage['key']] = $stage;
+    }
+    assertSame(1, $flow['received']['count'], 'the queued ticket is in Received');
+    assertSame('live', $flow['received']['basis'], 'and Received is a live count');
+    assertSame(1, $flow['in_kitchen']['count'], 'the cooking ticket is in the kitchen');
+    assertSame(0, $flow['ready']['count'], 'nothing is waiting under the pass');
+    assertSame(1, $flow['served']['count'], 'one ticket went out');
+    assertSame('window', $flow['served']['basis'], 'and Served is the one figure the date filter moves');
+    assertSame(1, $board['flow']['overdue'], 'one ticket is past its own station clock, not both');
+
+    assertSame(true, $board['serve']['available'], 'a ticket was marked served, so there is a time to report');
+    assertSame(1080, $board['serve']['average_seconds'], 'fired to served is eighteen minutes');
+    assertSame(1, $board['serve']['sampled'], 'over one ticket, and the count is published beside the figure');
+    assertSame(null, $board['serve']['change_pc'], 'nothing was served the day before, so there is no comparison');
+
+    // The two figures POS cannot answer are gaps, never zeroes.
+    assertSame(false, $board['rating']['available'], 'POS collects no guest feedback');
+    assertSame('not_implemented', $board['rating']['reason'], 'and says why rather than showing a score');
+    assertSame(null, $board['sales']['change_pc'], 'the day before took nothing, so there is no percentage');
+
+    // Service is read from the tills and is not a switch this product has.
+    assertSame('open', $board['service']['state'], 'a shift is open on a till here');
+    assertSame(false, $board['service']['changeable'], 'and POS has no separate open/closed control');
+
+    assertSame(true, $board['setup']['configured'], 'tables exist, so this is a restaurant with a quiet night');
+
+    assertSame(1, count($board['orders']['items']), 'the seated table is the one order on the board');
+    $order = $board['orders']['items'][0];
+    assertSame('delayed', $order['state'], 'its state is derived from its own tickets, worst first');
+    assertSame('T01', $order['table_code'], 'and it names the table');
+    assertSame('running', $order['elapsed_basis'], 'an open order is timed as running, not as time taken');
+    // Lines, not units, which is what the retail board's held bills count too.
+    assertSame(2, $order['item_count'], 'with the two lines that are on it');
+
+    // A table with no session is free, and the donut is drawn from these.
+    assertSame(2, $board['kpis']['tables_total'], 'two tables');
+    assertSame(1, $board['kpis']['tables_occupied'], 'one of them seated');
+    assertSame(1, $board['kpis']['tickets_served'], 'and one ticket served today');
+});
+
 check('the customers board counts identified bills only, and says loyalty does not exist', function () use ($ctx, $auth) {
     resetDatabase();
     [, $terminalId] = seedOutlet($ctx);

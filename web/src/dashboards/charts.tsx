@@ -226,6 +226,93 @@ export function BarChart({
   )
 }
 
+/**
+ * A donut, for a whole split into a handful of named parts.
+ *
+ * Used where the WHOLE is the point — twelve of twenty tables — which a row of
+ * bars states less directly. Drawn as one arc per slice with stroke-dasharray
+ * rather than a conic-gradient, so the same code produces the accessible table
+ * underneath and a zero-sized slice simply draws nothing instead of a hairline.
+ *
+ * The legend beside it carries the label and the figure for every slice, so
+ * nothing here depends on telling two colours apart.
+ */
+export function DonutChart({
+  slices,
+  centreValue,
+  centreLabel,
+  caption,
+  format,
+  tableVisible = false,
+}: {
+  slices: Array<{ key: string; label: string; value: number; colour: string }>
+  centreValue: string
+  centreLabel: string
+  caption: string
+  format: (value: number) => string
+  tableVisible?: boolean
+}) {
+  const titleId = useId()
+  const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0)
+
+  const radius = 54
+  const circumference = 2 * Math.PI * radius
+  let consumed = 0
+
+  return (
+    <div className="pos-chart pos-chart--donut">
+      <svg viewBox="0 0 140 140" role="img" aria-labelledby={titleId}>
+        <title id={titleId}>
+          {caption}: {slices.map((slice) => `${slice.label} ${format(slice.value)}`).join(', ')}
+        </title>
+
+        {/* The track. It is also the whole chart when nothing has been counted
+            yet, which is why it is drawn unconditionally. */}
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="#eef2ef" strokeWidth="16" />
+
+        <g transform="rotate(-90 70 70)">
+          {slices.map((slice) => {
+            const value = Math.max(0, slice.value)
+            if (total <= 0 || value <= 0) return null
+
+            const length = (value / total) * circumference
+            const offset = consumed
+            consumed += length
+
+            return (
+              <circle
+                key={slice.key}
+                cx="70"
+                cy="70"
+                r={radius}
+                fill="none"
+                stroke={slice.colour}
+                strokeWidth="16"
+                strokeDasharray={`${length.toFixed(2)} ${(circumference - length).toFixed(2)}`}
+                strokeDashoffset={(-offset).toFixed(2)}
+              />
+            )
+          })}
+        </g>
+
+        <text x="70" y="68" textAnchor="middle" fontSize="19" fontWeight="800" fill="var(--pos-text)">
+          {centreValue}
+        </text>
+        <text x="70" y="85" textAnchor="middle" fontSize="10" fill="var(--pos-muted)">
+          {centreLabel}
+        </text>
+      </svg>
+
+      <ChartTable
+        visible={tableVisible}
+        caption={caption}
+        columns={['State', 'Count']}
+        rows={slices.map((slice) => [slice.label, format(slice.value)])}
+      />
+    </div>
+  )
+}
+
 export interface ShareRow {
   key: string
   label: string

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CreditCard, Loader2, Lock, Pause, Play, Search, Trash2, Wallet, X } from 'lucide-react'
 import { usePos } from '../context/PosContext'
 import { api, ApiError } from '../services/api'
@@ -7,6 +7,24 @@ import type { Cart, CatalogItem, PaymentMode, RegisterSession } from '../service
 import { cacheGet, cachePut, deviceUuid, outboxAdd, type OutboxSale } from '../offline/db'
 import { Button, Card, Field, Input, Notice, Select, money } from '../ui'
 import { CommandStrip } from '../components/CommandStrip'
+
+/**
+ * The kinds of order this till can start.
+ *
+ * `order_kind` is a real column the API already validates, and a takeaway is
+ * the same sale with a different label on it — so the quick actions on the
+ * restaurant board deep-link here with ?order_kind=takeaway rather than a
+ * second checkout screen existing. Anything unrecognised falls back to a
+ * counter sale; a URL is a claim, not an instruction.
+ */
+const ORDER_KINDS = {
+  retail: 'Counter sale',
+  takeaway: 'Takeaway',
+  delivery: 'Delivery',
+  quick_service: 'Quick service',
+} as const
+
+type TillOrderKind = keyof typeof ORDER_KINDS
 
 const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -20,6 +38,13 @@ const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
 
 export default function Till() {
   const { terminalId, terminal, can, session: posSession } = usePos()
+  const [searchParams] = useSearchParams()
+
+  const orderKind = useMemo<TillOrderKind>(() => {
+    const raw = searchParams.get('order_kind')
+
+    return raw !== null && raw in ORDER_KINDS ? (raw as TillOrderKind) : 'retail'
+  }, [searchParams])
 
   const [shift, setShift] = useState<RegisterSession | null>(null)
   const [cart, setCart] = useState<Cart | null>(null)
@@ -99,11 +124,11 @@ export default function Till() {
     const response = await api.post<Cart>('v1/carts', {
       terminal_id: terminalId,
       session_id: shift?.session_id ?? null,
-      order_kind: 'retail',
+      order_kind: orderKind,
     })
     setCart(response.data)
     return response.data
-  }, [cart, terminalId, shift])
+  }, [cart, terminalId, shift, orderKind])
 
   const addItem = async (item: CatalogItem, quantity = 1) => {
     setBusy(true)
@@ -255,7 +280,15 @@ export default function Till() {
 
         <Scanner inputRef={scanRef} onPick={addItem} offline={offline} />
 
-        <Card title="On the counter" subtitle={cart?.token_no ? `Token ${cart.token_no}` : undefined}>
+        <Card
+          title="On the counter"
+          subtitle={[
+            ORDER_KINDS[(cart?.order_kind ?? orderKind) as TillOrderKind] ?? ORDER_KINDS[orderKind],
+            cart?.token_no ? `Token ${cart.token_no}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        >
           {!cart || cart.lines.length === 0 ? (
             <p style={{ color: 'var(--muted)', margin: 0 }}>Scan or search for the first item.</p>
           ) : (

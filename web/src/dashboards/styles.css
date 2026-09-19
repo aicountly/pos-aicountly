@@ -772,12 +772,623 @@
 }
 
 /* --------------------------------------------------------------------------
+   Restaurant Operations — the command centre
+   --------------------------------------------------------------------------
+
+   Everything below is additive and prefixed, so no other board changes shape.
+   Two rules from the top of this file still hold and are the reason several of
+   these blocks look more verbose than they need to:
+
+     • A tint never carries a meaning. Every card, chip, slice and stage states
+       its figure and its status in words; the colour only groups them.
+     • Nothing animates for a viewer who asked it not to — see the
+       prefers-reduced-motion block at the foot of this file, which covers the
+       shimmer, the pulse and the refresh spinner.
+   -------------------------------------------------------------------------- */
+
+.pos-page-header__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pos-page-header__mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--pos-soft-green);
+  color: var(--pos-action);
+}
+
+@keyframes pos-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pos-spin { animation: pos-spin 900ms linear infinite; }
+
+/* --- Tinted metric cards -------------------------------------------------- */
+
+.pos-metric__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.pos-metric__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+}
+
+.pos-metric__context { font-size: 12px; }
+
+.pos-metric__progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.09);
+  overflow: hidden;
+}
+
+.pos-metric__progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pos-action);
+}
+
+.pos-metric--green  { background: linear-gradient(135deg, #f5fff8, #eefaf1); border-color: #d2ecda; }
+.pos-metric--blue   { background: linear-gradient(135deg, #f8fbff, #eff5ff); border-color: #dae6fb; }
+.pos-metric--orange { background: linear-gradient(135deg, #fffaf6, #fff1e8); border-color: #f7e0d1; }
+.pos-metric--purple { background: linear-gradient(135deg, #fcfaff, #f5f0ff); border-color: #e5dcfb; }
+.pos-metric--cyan   { background: linear-gradient(135deg, #f5ffff, #ebfafa); border-color: #cdeeec; }
+
+.pos-metric--green .pos-metric__icon  { color: #1a7a33; }
+.pos-metric--blue .pos-metric__icon   { color: #2b5bb5; }
+.pos-metric--orange .pos-metric__icon { color: #a8590f; }
+.pos-metric--purple .pos-metric__icon { color: #6b34c9; }
+.pos-metric--cyan .pos-metric__icon   { color: #10807d; }
+
+/* --- Skeletons ------------------------------------------------------------ */
+
+/*
+ * A placeholder is shaped like the thing it becomes.
+ *
+ * The point is not decoration: a spinner followed by a full board reflows the
+ * page twice, and a manager who has already started reading a figure that then
+ * moves has been told the wrong number.
+ */
+@keyframes pos-shimmer {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+
+.pos-skeleton {
+  display: block;
+  width: 100%;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #eef2ef 25%, #f7faf8 37%, #eef2ef 63%);
+  background-size: 300% 100%;
+  animation: pos-shimmer 1.3s ease-in-out infinite;
+}
+
+.pos-skeleton--label { width: 52%; }
+.pos-skeleton--value { width: 74%; height: 26px; border-radius: 9px; }
+.pos-skeleton--line  { width: 66%; height: 11px; }
+
+.pos-metric--skeleton,
+.pos-panel--skeleton { cursor: default; }
+.pos-metric--skeleton:hover { border-color: var(--pos-border); box-shadow: var(--pos-shadow); }
+.pos-panel--skeleton { min-height: 148px; }
+
+/* --- Service state -------------------------------------------------------- */
+
+/*
+ * A disclosure, not a menu.
+ *
+ * POS has no open/closed switch, so this opens to EXPLAIN the state and point
+ * at the screen that changes it. Built on <details> so the keyboard and the
+ * accessibility tree work without a line of JavaScript holding them up.
+ */
+.pos-service { position: relative; }
+
+.pos-service__summary {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;
+  min-width: 190px;
+  padding: 7px 13px;
+  border: 1px solid var(--brand-line, #cfe7c6);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eefaf2, #f9fefb);
+  cursor: pointer;
+  list-style: none;
+}
+
+.pos-service--closed .pos-service__summary {
+  border-color: var(--pos-border);
+  background: var(--surface-2, #fbfcfb);
+}
+
+.pos-service__summary::-webkit-details-marker { display: none; }
+
+.pos-service__dot {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--pos-brand);
+  box-shadow: 0 0 0 4px rgba(37, 176, 3, 0.13);
+}
+
+.pos-service--closed .pos-service__dot {
+  background: #9aa8a0;
+  box-shadow: 0 0 0 4px rgba(154, 168, 160, 0.16);
+}
+
+.pos-service__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+
+.pos-service__text strong { font-size: 13px; }
+.pos-service__text small { color: var(--pos-muted); font-size: 11px; }
+.pos-service__chevron { color: var(--pos-muted); transition: transform 160ms ease; }
+.pos-service[open] .pos-service__chevron { transform: rotate(180deg); }
+
+.pos-service__panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+}
+
+.pos-service__panel p { margin: 0 0 9px; font-size: 12.5px; }
+
+/* --- The three-column operations grid ------------------------------------- */
+
+.pos-grid-ops {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.85fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: 20px;
+}
+
+/* --- Order flow ----------------------------------------------------------- */
+
+.pos-flow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  margin: 0;
+  padding: 4px 0 0;
+  list-style: none;
+  /* Rather than crushing four stages into a phone's width. The panel body
+     clips, so this scroller is what keeps the page itself from moving. */
+  overflow-x: auto;
+}
+
+.pos-flow__stage {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+  text-align: center;
+}
+
+/* The connector sits behind the icons and stops short of both, so it reads as
+   a path rather than as a border. */
+.pos-flow__link {
+  position: absolute;
+  top: 19px;
+  right: calc(50% + 23px);
+  left: calc(-50% + 23px);
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #dfe7e1, #cfe0ea, #cfe7c6);
+}
+
+.pos-flow__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 9px;
+  border-radius: 50%;
+}
+
+.pos-flow__icon--received   { background: #fff1e8; color: #a8590f; }
+.pos-flow__icon--in_kitchen { background: #eff5ff; color: #2b5bb5; }
+.pos-flow__icon--ready      { background: #edf8e9; color: #1a7a33; }
+.pos-flow__icon--served     { background: #f5f0ff; color: #6b34c9; }
+
+.pos-flow__count { font-size: 19px; line-height: 1; font-variant-numeric: tabular-nums; }
+/* One line per stage, so the four labels sit on the same baseline and the row
+   does not go ragged the moment one of them is two words. */
+.pos-flow__label { margin-top: 5px; font-size: 11.5px; font-weight: 650; white-space: nowrap; }
+.pos-flow__basis { margin-top: 2px; color: var(--pos-muted); font-size: 10.5px; }
+
+/* --- "Live" ---------------------------------------------------------------- */
+
+.pos-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success, #216f13);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+@keyframes pos-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.pos-live__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pos-brand);
+  animation: pos-pulse 2.4s ease-in-out infinite;
+}
+
+/* --- Table status --------------------------------------------------------- */
+
+.pos-tablestatus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.pos-chart--donut { max-width: 142px; flex: 0 0 auto; }
+
+.pos-tablelegend {
+  flex: 1 1 130px;
+  min-width: 130px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pos-tablelegend li {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.pos-tablelegend li + li { border-top: 1px solid #f1f4f2; }
+.pos-tablelegend strong { font-variant-numeric: tabular-nums; }
+
+/* --- Orders on the board -------------------------------------------------- */
+
+.pos-orderlist { display: flex; flex-direction: column; }
+
+.pos-orderrow {
+  display: grid;
+  grid-template-columns: 0.7fr 1.25fr 0.7fr auto 0.6fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f1f4f2;
+  color: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.pos-orderrow:last-child { border-bottom: 0; }
+.pos-orderrow:hover { background: #fafcfa; }
+.pos-orderrow--static { cursor: default; }
+.pos-orderrow--static:hover { background: transparent; }
+.pos-orderrow__ref { font-weight: 800; font-variant-numeric: tabular-nums; }
+.pos-orderrow__where { min-width: 0; }
+.pos-orderrow__items { white-space: nowrap; }
+.pos-orderrow__state { display: flex; justify-content: flex-start; }
+.pos-orderrow__clock { text-align: right; color: var(--pos-muted); white-space: nowrap; }
+
+/* --- Needs attention ------------------------------------------------------ */
+
+.pos-attentionstrip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+  box-shadow: var(--pos-shadow);
+}
+
+.pos-attentionstrip__label {
+  color: var(--pos-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pos-attentionstrip__items { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-attentionchip { text-decoration: none; border-radius: 999px; }
+.pos-attentionchip:hover .pos-badge { filter: brightness(0.97); }
+
+/* --- The suggestion strip ------------------------------------------------- */
+
+.pos-suggest {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 18px;
+  border: 1px solid #e3d9fb;
+  border-radius: var(--pos-radius);
+  background: linear-gradient(90deg, #fbf9ff 0%, #f6f1ff 55%, #fdfcff 100%);
+}
+
+.pos-suggest--warning { border-color: #f0dfb8; background: linear-gradient(90deg, #fffdf6, #fffaf0); }
+.pos-suggest--danger  { border-color: #f2cfcf; background: linear-gradient(90deg, #fffafa, #fff5f5); }
+.pos-suggest--success { border-color: var(--brand-line, #cfe7c6); background: linear-gradient(90deg, #fbfff9, #f5fcf2); }
+
+.pos-suggest__mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  color: #6b34c9;
+}
+
+.pos-suggest--warning .pos-suggest__mark { color: var(--warning, #805500); }
+.pos-suggest--danger .pos-suggest__mark  { color: var(--danger, #aa2929); }
+.pos-suggest--success .pos-suggest__mark { color: var(--success, #216f13); }
+
+.pos-suggest__body { flex: 1; min-width: 0; }
+.pos-suggest__meta { justify-content: flex-start; gap: 9px; }
+.pos-suggest__meta strong { font-size: 13px; }
+.pos-suggest__title { margin: 6px 0 3px; font-size: 13.5px; font-weight: 700; }
+.pos-suggest__body p.pos-muted { margin: 0; font-size: 12.5px; }
+.pos-suggest__actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+.pos-button--suggest {
+  border-color: transparent;
+  background: linear-gradient(135deg, #7c4ceb, #6326dd);
+  color: white;
+}
+
+.pos-button--suggest:hover:not(:disabled) { background: linear-gradient(135deg, #7340e5, #5820c9); }
+
+.pos-suggest--warning .pos-button--suggest,
+.pos-suggest--danger .pos-button--suggest,
+.pos-suggest--success .pos-button--suggest {
+  background: var(--pos-action);
+}
+
+.pos-iconbutton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--pos-border);
+  border-radius: 11px;
+  background: var(--pos-surface);
+  color: var(--pos-muted);
+  cursor: pointer;
+}
+
+.pos-iconbutton:hover { border-color: #cbd5cd; color: var(--pos-text); }
+
+/* --- Quick actions -------------------------------------------------------- */
+
+.pos-quickactions {
+  padding: 18px 20px 20px;
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  background: var(--pos-surface);
+  box-shadow: var(--pos-shadow);
+}
+
+.pos-quickactions__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(112px, 100%), 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.pos-quickaction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 96px;
+  padding: 12px 8px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+  color: var(--pos-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.pos-quickaction:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: #a5ce98;
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+}
+
+.pos-quickaction:disabled {
+  cursor: not-allowed;
+  background: var(--surface-2, #fbfcfb);
+  color: var(--pos-muted);
+}
+
+.pos-quickaction--primary { border-color: #cfe7c6; background: linear-gradient(135deg, #f3fff6, #eafaef); }
+
+.pos-quickaction__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #f2f5f3;
+  color: var(--pos-action);
+}
+
+.pos-quickaction--primary .pos-quickaction__icon { background: var(--pos-action); color: white; }
+.pos-quickaction:disabled .pos-quickaction__icon { background: #f2f5f3; color: #9aa8a0; }
+.pos-quickaction__note { color: var(--pos-subtle, #94a3b8); font-size: 10px; font-weight: 600; }
+
+/* --- Service right now / nothing open ------------------------------------- */
+
+.pos-session {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(280px, 1.6fr);
+  align-items: center;
+  gap: 24px;
+  padding: 22px 26px;
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  background: linear-gradient(135deg, #ffffff, #fcfdfc);
+  box-shadow: var(--pos-shadow);
+}
+
+.pos-session--active { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); align-items: start; }
+.pos-session__art { display: grid; place-items: center; min-height: 120px; }
+
+/* A dining table, drawn rather than fetched: one more decorative request on a
+   shop connection is one more thing to be slow. */
+.pos-session__table {
+  display: grid;
+  place-items: center;
+  width: 150px;
+  height: 92px;
+  border-radius: 50% 50% 22px 22px;
+  background: radial-gradient(circle at 50% 34%, #f3edff, #f5f8f6 62%, transparent 63%);
+  color: #6b34c9;
+}
+
+.pos-session__copy h2 { margin-bottom: 6px; }
+.pos-session__copy p { margin: 0 0 14px; font-size: 13px; }
+.pos-session__side h3 { margin-top: 0; }
+
+.pos-session__list { margin: 0; padding: 0; list-style: none; }
+
+.pos-session__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 12.5px;
+}
+
+.pos-session__list li + li { border-top: 1px solid #f1f4f2; }
+
+/* --- Setting the restaurant up -------------------------------------------- */
+
+.pos-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+  align-items: start;
+  gap: 26px;
+  padding: 26px;
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  background: linear-gradient(135deg, #ffffff, #fbfdfb);
+  box-shadow: var(--pos-shadow);
+}
+
+.pos-setup__copy h2 { margin-bottom: 8px; font-size: 20px; }
+.pos-setup__copy p { margin: 0 0 16px; font-size: 13px; }
+.pos-setup__steps { margin: 0; padding: 0; list-style: none; }
+.pos-setup__progress { display: grid; gap: 6px; margin-bottom: 14px; font-size: 12px; }
+
+.pos-setup__step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid #f1f4f2;
+  font-size: 13px;
+}
+
+.pos-setup__tick {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--pos-border);
+  border-radius: 50%;
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pos-setup__step--done .pos-setup__tick { border-color: var(--pos-action); background: var(--pos-action); }
+
+/* --- Odds and ends -------------------------------------------------------- */
+
+.pos-actions--centred { justify-content: center; margin-top: 14px; }
+
+/* --------------------------------------------------------------------------
    Responsive
    -------------------------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  /* The orders list is the widest of the three and the one worth reading in
+     full, so it takes the whole row rather than being squeezed. */
+  .pos-grid-ops { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-grid-ops > :nth-child(3) { grid-column: 1 / -1; }
+}
 
 @media (max-width: 1100px) {
   .pos-grid-main { grid-template-columns: minmax(0, 1fr); }
   .pos-kitchen-board { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
+  .pos-session,
+  .pos-session--active,
+  .pos-setup { grid-template-columns: minmax(0, 1fr); }
+  .pos-session__art { display: none; }
 }
 
 @media (max-width: 720px) {
@@ -791,6 +1402,28 @@
   .pos-actions { width: 100%; }
   .pos-actions .pos-button { flex: 1 1 auto; }
   .pos-counter__figures { gap: 12px; }
+
+  .pos-grid-ops { grid-template-columns: minmax(0, 1fr); }
+  .pos-grid-ops > :nth-child(3) { grid-column: auto; }
+
+  .pos-page-header__identity { gap: 11px; }
+  .pos-page-header__mark { width: 40px; height: 40px; }
+
+  .pos-service { flex: 1 1 100%; }
+  .pos-service__summary { width: 100%; }
+  .pos-service__panel { right: auto; left: 0; }
+
+  .pos-suggest { align-items: flex-start; flex-direction: column; }
+  .pos-suggest__actions { width: 100%; }
+  .pos-suggest__actions .pos-button { flex: 1; }
+
+  /* Three columns on a phone: reference, where, and the state. The item count
+     and the clock are in the row's accessible name either way. */
+  .pos-orderrow { grid-template-columns: 0.75fr 1.2fr auto; row-gap: 4px; }
+  .pos-orderrow__items { display: none; }
+  .pos-orderrow__clock { grid-column: 3; text-align: right; }
+
+  .pos-session, .pos-setup { padding: 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
