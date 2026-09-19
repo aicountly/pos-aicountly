@@ -67,6 +67,50 @@ final class RestaurantController extends Controller
         Http::data((new TableService($ctx, $auth))->close((int) $id));
     }
 
+    /**
+     * Cleaning, out of service, or ready again.
+     *
+     * A POST rather than a PUT on the table: this records that somebody decided
+     * something about the table just now, and the audit entry is the point.
+     */
+    public static function tableServiceState(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->setServiceState((int) $id, Http::body()));
+    }
+
+    // -----------------------------------------------------------------------
+    // Bookings
+    // -----------------------------------------------------------------------
+
+    public static function reservations(): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data(['reservations' => (new TableService($ctx, $auth))->reservations([
+            'table_id' => Http::intParam('table_id'),
+            'floor_id' => Http::intParam('floor_id'),
+            'status'   => Http::param('status'),
+        ])]);
+    }
+
+    public static function createReservation(): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->createReservation(Http::body()), 201);
+    }
+
+    public static function cancelReservation(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->cancelReservation((int) $id, Http::body()));
+    }
+
+    public static function seatReservation(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->seatReservation((int) $id, Http::body()), 201);
+    }
+
     // -----------------------------------------------------------------------
     // Kitchen tickets
     // -----------------------------------------------------------------------

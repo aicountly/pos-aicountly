@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CreditCard, Loader2, Lock, Pause, Play, Search, Trash2, Wallet, X } from 'lucide-react'
 import { usePos } from '../context/PosContext'
 import { api, ApiError } from '../services/api'
@@ -30,6 +30,65 @@ export default function Till() {
   const [offline, setOffline] = useState(() => !navigator.onLine)
 
   const scanRef = useRef<HTMLInputElement | null>(null)
+
+  // ------------------------------------------------------------------
+  // A bill opened from somewhere else
+  // ------------------------------------------------------------------
+  //
+  // The floor screen sends the cashier here with ?cart=<id> when a waiter picks
+  // View order or Add items on a table. The till loads THAT bill rather than
+  // starting a second one beside it, which is how a table ends up with two
+  // bills and one of them uncollected.
+
+  const [params, setParams] = useSearchParams()
+  const requestedCart = Number(params.get('cart') ?? '')
+
+  useEffect(() => {
+    if (!Number.isInteger(requestedCart) || requestedCart <= 0) return
+    if (cart?.cart_id === requestedCart) return
+
+    let cancelled = false
+
+    void (async () => {
+      setBusy(true)
+      setError(null)
+      try {
+        const found = (await api.one<Cart>(`v1/carts/${requestedCart}`)).data
+        if (cancelled) return
+
+        if (found.status === 'COMPLETED' || found.status === 'VOID') {
+          setNotice(`That order is already ${found.status.toLowerCase()}, so there is nothing to work on.`)
+          return
+        }
+
+        // A held bill has to be resumed before it can be added to; an open one
+        // is already live and is picked up as it stands.
+        const opened =
+          found.status === 'HELD' ? (await api.post<Cart>(`v1/carts/${found.cart_id}/resume`, {})).data : found
+
+        if (cancelled) return
+        setCart(opened)
+        setNotice(null)
+        await loadHeld()
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not open that order.')
+      } finally {
+        if (!cancelled) {
+          setBusy(false)
+          // Consumed, so a refresh does not re-open it over whatever the
+          // cashier has moved on to.
+          setParams({}, { replace: true })
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+    // cart is read but deliberately not a dependency: this runs for the id in
+    // the URL, not every time the cart it loaded changes underneath it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedCart])
 
   // ------------------------------------------------------------------
   // Shift

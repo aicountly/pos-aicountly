@@ -6,6 +6,7 @@ namespace Aicountly\Api\Controllers;
 
 use Aicountly\Api\Audit;
 use Aicountly\Api\Db;
+use Aicountly\Api\Domain\TableService;
 use Aicountly\Api\Http;
 use Aicountly\Api\Permissions;
 
@@ -239,7 +240,9 @@ final class AdminController extends Controller
     {
         [$auth, $ctx] = self::enter();
         Http::data(['floors' => Db::all(
-            'SELECT * FROM pos_floors WHERE cmp_id = :cmp ORDER BY sort_order, floor_name',
+            'SELECT floor_id, location_id, floor_code, floor_name, description, floor_kind,
+                    is_open, sort_order, is_active
+             FROM pos_floors WHERE cmp_id = :cmp AND is_active = TRUE ORDER BY sort_order, floor_name',
             ['cmp' => $ctx->cmpId],
         )]);
     }
@@ -247,42 +250,50 @@ final class AdminController extends Controller
     public static function createFloor(): void
     {
         [$auth, $ctx] = self::enter();
-        Permissions::assert($ctx, $auth, 'terminal.manage');
+        Http::data((new TableService($ctx, $auth))->createFloor(Http::body()), 201);
+    }
 
-        $body = Http::body();
-        $floorId = (int) Db::insert('pos_floors', [
-            'cmp_id'      => $ctx->cmpId,
-            'location_id' => self::id($body['location_id'] ?? null),
-            'floor_code'  => self::text($body['floor_code'] ?? null) ?? 'GF',
-            'floor_name'  => self::text($body['floor_name'] ?? null) ?? 'Ground floor',
-            'sort_order'  => (int) ($body['sort_order'] ?? 0),
-        ], 'floor_id');
+    public static function updateFloor(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->updateFloor((int) $id, Http::body()));
+    }
 
-        Http::data(Db::first('SELECT * FROM pos_floors WHERE floor_id = :id', ['id' => $floorId]) ?? [], 201);
+    public static function deleteFloor(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->deleteFloor((int) $id));
+    }
+
+    /**
+     * The whole floor's layout, saved once when the manager presses Save.
+     *
+     * A PUT rather than a POST because it replaces the arrangement rather than
+     * adding to it, and pressing Save twice has to mean the same thing as
+     * pressing it once.
+     */
+    public static function saveFloorLayout(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->saveLayout((int) $id, Http::body()));
     }
 
     public static function createTable(): void
     {
         [$auth, $ctx] = self::enter();
-        Permissions::assert($ctx, $auth, 'terminal.manage');
+        Http::data((new TableService($ctx, $auth))->createTable(Http::body()), 201);
+    }
 
-        $body = Http::body();
-        $floorId = self::id($body['floor_id'] ?? null);
-        if ($floorId === null) {
-            Http::validationFailed('Which floor is the table on?', ['field' => 'floor_id']);
-        }
+    public static function updateTable(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->updateTable((int) $id, Http::body()));
+    }
 
-        $tableId = (int) Db::insert('pos_tables', [
-            'cmp_id'     => $ctx->cmpId,
-            'floor_id'   => $floorId,
-            'table_code' => self::text($body['table_code'] ?? null) ?? 'T1',
-            'table_name' => self::text($body['table_name'] ?? null),
-            'seats'      => max(1, (int) ($body['seats'] ?? 2)),
-            'layout_x'   => isset($body['layout_x']) ? (int) $body['layout_x'] : null,
-            'layout_y'   => isset($body['layout_y']) ? (int) $body['layout_y'] : null,
-        ], 'table_id');
-
-        Http::data(Db::first('SELECT * FROM pos_tables WHERE table_id = :id', ['id' => $tableId]) ?? [], 201);
+    public static function deleteTable(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->deleteTable((int) $id));
     }
 
     public static function stations(): void
