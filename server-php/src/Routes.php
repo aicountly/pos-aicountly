@@ -149,6 +149,7 @@ final class Routes
         $router->get('v1/dashboards/retail', [DashboardController::class, 'retail']);
         $router->get('v1/dashboards/restaurant', [DashboardController::class, 'restaurant']);
         $router->get('v1/dashboards/customers', [DashboardController::class, 'customers']);
+        $router->get('v1/dashboards/customers/directory', [DashboardController::class, 'customerDirectory']);
         $router->get('v1/dashboards/controls', [DashboardController::class, 'controls']);
 
         // Drill-downs the boards link into. Paged server-side — a dashboard

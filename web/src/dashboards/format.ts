@@ -18,6 +18,39 @@ export function money(value: number | null | undefined, currency = 'INR'): strin
   }).format(value)
 }
 
+/**
+ * Money at a glance, on the Indian scale: ₹1.25Cr, ₹35.6L.
+ *
+ * For a headline figure only — a KPI card, a chart axis, the middle of a donut.
+ * Every table cell and every total still uses `money()`, because a compact
+ * figure has thrown precision away and a column of them cannot be checked
+ * against a till roll.
+ *
+ * There is deliberately no ₹K step. Lakh and crore are how this figure is read
+ * aloud in the shops this product is used in, whereas ₹52.3K is both longer to
+ * read than ₹52,340 and less precise than it.
+ */
+export function compactMoney(value: number | null | undefined, currency = 'INR'): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+
+  const sign = value < 0 ? '-' : ''
+  const size = Math.abs(value)
+  const symbol = currency === 'INR' ? '₹' : ''
+
+  const short = (divisor: number, suffix: string): string => {
+    const scaled = size / divisor
+    // Two significant-ish digits: 1.25Cr, but 35.6L rather than 35.60L.
+    const places = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2
+
+    return `${sign}${symbol}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: places }).format(scaled)}${suffix}`
+  }
+
+  if (size >= 10000000) return short(10000000, 'Cr')
+  if (size >= 100000) return short(100000, 'L')
+
+  return money(value, currency)
+}
+
 /** The exact figure, for a table cell where rounding to the rupee would hide a variance. */
 export function moneyExact(value: number | null | undefined, currency = 'INR'): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
@@ -99,14 +132,21 @@ export function compare(
   current: number,
   previous: number | null | undefined,
   label: string | null | undefined,
-): { label: string; direction: 'up' | 'down' | 'flat' } | null {
+): { label: string; short: string; direction: 'up' | 'down' | 'flat' } | null {
   if (previous === null || previous === undefined || !Number.isFinite(previous) || previous === 0) return null
 
   const change = ((current - previous) / previous) * 100
   const direction = Math.abs(change) < 0.5 ? 'flat' : change > 0 ? 'up' : 'down'
   const words = direction === 'flat' ? 'about the same' : `${direction === 'up' ? 'up' : 'down'} ${percent(Math.abs(change), 0)}`
 
-  return { label: `${words} ${label ?? 'vs the comparison period'}`, direction }
+  return {
+    label: `${words} ${label ?? 'vs the comparison period'}`,
+    // The chip on a KPI card has room for a figure, not a sentence. The
+    // sentence is still what a screen reader is given, and still what the
+    // panels that have room for it print.
+    short: direction === 'flat' ? 'level' : percent(Math.abs(change), 0),
+    direction,
+  }
 }
 
 /** A person's uuid, shortened for a table cell without pretending it is a name. */
@@ -114,6 +154,24 @@ export function actor(uuid: string | null | undefined): string {
   if (!uuid) return '—'
 
   return uuid.length > 14 ? `${uuid.slice(0, 8)}…` : uuid
+}
+
+/** "18 Sep 2026" — the absolute date, with no time on it. */
+export function dateOnly(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+
+  return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/** How many whole days ago, or null when there is no date to measure from. */
+export function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return null
+
+  return Math.max(0, Math.floor((Date.now() - then) / 86400000))
 }
 
 export function titleCase(value: string): string {

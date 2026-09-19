@@ -48,6 +48,7 @@ export function TrendChart({
   height = 200,
   tableVisible = false,
   caption,
+  secondary = 'comparison',
 }: {
   points: SeriesPoint[]
   valueLabel: string
@@ -56,6 +57,16 @@ export function TrendChart({
   height?: number
   tableVisible?: boolean
   caption: string
+  /**
+   * What the second line is.
+   *
+   * `comparison` is the same measure in an earlier window — grey, dashed,
+   * visibly subordinate. `series` is a measure in its own right, like new
+   * customers beside returning ones, and is drawn as a peer: its own colour,
+   * its own markers, its own area. Both stay distinguishable without colour,
+   * which is why the peer series is dashed too, at a different rhythm.
+   */
+  secondary?: 'comparison' | 'series'
 }) {
   const titleId = useId()
 
@@ -76,10 +87,13 @@ export function TrendChart({
   const y = (v: number) => pad.top + innerH - (v / max) * innerH
 
   const line = points.map((p, i) => ({ x: x(i), y: y(p.value) }))
-  const area = `${path(line)} L${x(points.length - 1).toFixed(1)},${(pad.top + innerH).toFixed(1)} L${x(0).toFixed(1)},${(pad.top + innerH).toFixed(1)} Z`
-  const comparisonLine = hasComparison
-    ? path(points.map((p, i) => ({ x: x(i), y: y(p.comparison ?? 0) })))
-    : null
+  const close = (d: string) =>
+    `${d} L${x(points.length - 1).toFixed(1)},${(pad.top + innerH).toFixed(1)} L${x(0).toFixed(1)},${(pad.top + innerH).toFixed(1)} Z`
+  const area = close(path(line))
+
+  const secondLine = hasComparison ? points.map((p, i) => ({ x: x(i), y: y(p.comparison ?? 0) })) : null
+  const comparisonLine = secondLine ? path(secondLine) : null
+  const isPeer = secondary === 'series'
 
   const ticks = tickIndexes(points.length)
 
@@ -98,11 +112,23 @@ export function TrendChart({
         ))}
 
         <path className="pos-chart__area" d={area} />
-        {comparisonLine && <path className="pos-chart__line pos-chart__line--comparison" d={comparisonLine} />}
+        {isPeer && comparisonLine && <path className="pos-chart__area pos-chart__area--secondary" d={close(comparisonLine)} />}
+        {comparisonLine && (
+          <path
+            className={`pos-chart__line ${isPeer ? 'pos-chart__line--secondary' : 'pos-chart__line--comparison'}`}
+            d={comparisonLine}
+          />
+        )}
         <path className="pos-chart__line" d={path(line)} />
 
         {points.length <= 32 &&
           line.map((p, i) => <circle key={i} className="pos-chart__point" cx={p.x} cy={p.y} r={2.5} />)}
+        {isPeer &&
+          secondLine &&
+          points.length <= 32 &&
+          secondLine.map((p, i) => (
+            <circle key={`s${i}`} className="pos-chart__point pos-chart__point--secondary" cx={p.x} cy={p.y} r={2.5} />
+          ))}
 
         {ticks.map((i) => (
           <text key={i} className="pos-chart__axis" x={x(i)} y={height - 8} textAnchor="middle">
@@ -117,7 +143,11 @@ export function TrendChart({
         </span>
         {hasComparison && comparisonLabel && (
           <span className="pos-legend__item">
-            <span className="pos-legend__swatch pos-legend__swatch--comparison" aria-hidden /> {comparisonLabel}
+            <span
+              className={`pos-legend__swatch ${isPeer ? 'pos-legend__swatch--secondary' : 'pos-legend__swatch--comparison'}`}
+              aria-hidden
+            />{' '}
+            {comparisonLabel}
           </span>
         )}
       </div>
@@ -384,6 +414,141 @@ export function ProgressRing({
           of {format(target)}
         </text>
       </svg>
+    </div>
+  )
+}
+
+export type SliceTone = 'brand' | 'brand-soft' | 'info' | 'warning' | 'accent' | 'muted'
+
+export interface DonutSlice {
+  key: string
+  label: string
+  value: number
+  /** What the slice is counting, under the label. */
+  note?: string | null
+  tone?: SliceTone
+}
+
+/**
+ * A share, as a ring with the total in the middle.
+ *
+ * ShareBars above is still the right answer where the rows carry definitions
+ * and want reading; this is for the three-or-four-way split a manager takes in
+ * at a glance. Both stay available on purpose — the donut is the summary, and
+ * the legend beside it repeats every label, figure and share as text so nothing
+ * here depends on telling two greens apart.
+ *
+ * Slices are separated by a stroke in the surface colour rather than by a gap,
+ * so a one-percent slice is still visible instead of collapsing to nothing.
+ */
+export function DonutChart({
+  slices,
+  format,
+  centerValue,
+  centerLabel,
+  caption,
+  emptyLabel = 'Nothing to break down in this period.',
+}: {
+  slices: DonutSlice[]
+  format: (value: number) => string
+  centerValue: string
+  centerLabel: string
+  caption: string
+  emptyLabel?: string
+}) {
+  const titleId = useId()
+
+  const usable = slices.filter((slice) => Number.isFinite(slice.value) && slice.value > 0)
+  const total = usable.reduce((sum, slice) => sum + slice.value, 0)
+
+  if (total <= 0) {
+    return <p className="pos-muted">{emptyLabel}</p>
+  }
+
+  const size = 184
+  const c = size / 2
+  const outer = 78
+  const inner = 52
+
+  const point = (angle: number, radius: number): [number, number] => [
+    c + radius * Math.cos(angle),
+    c + radius * Math.sin(angle),
+  ]
+
+  let cursor = -Math.PI / 2
+  const arcs = usable.map((slice) => {
+    const sweep = (slice.value / total) * Math.PI * 2
+    const from = cursor
+    const to = cursor + sweep
+    cursor = to
+
+    const [x0o, y0o] = point(from, outer)
+    const [x1o, y1o] = point(to, outer)
+    const [x1i, y1i] = point(to, inner)
+    const [x0i, y0i] = point(from, inner)
+    const large = sweep > Math.PI ? 1 : 0
+
+    return {
+      ...slice,
+      share: (slice.value / total) * 100,
+      d: `M${x0o.toFixed(2)},${y0o.toFixed(2)} A${outer},${outer} 0 ${large} 1 ${x1o.toFixed(2)},${y1o.toFixed(2)} L${x1i.toFixed(2)},${y1i.toFixed(2)} A${inner},${inner} 0 ${large} 0 ${x0i.toFixed(2)},${y0i.toFixed(2)} Z`,
+    }
+  })
+
+  // One slice is the whole ring, and an arc whose start and end coincide draws
+  // nothing at all. A ring drawn as a stroked circle is the same shape without
+  // the degenerate path.
+  const whole = arcs.length === 1 ? arcs[0] : null
+
+  return (
+    <div className="pos-chart pos-donut">
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-labelledby={titleId} className="pos-donut__svg">
+        <title id={titleId}>{caption}</title>
+
+        {whole ? (
+          <circle
+            className={`pos-donut__ring pos-donut__slice--${whole.tone ?? 'brand'}`}
+            cx={c}
+            cy={c}
+            r={(outer + inner) / 2}
+            strokeWidth={outer - inner}
+          />
+        ) : (
+          arcs.map((arc) => (
+            <path key={arc.key} className={`pos-donut__slice pos-donut__slice--${arc.tone ?? 'brand'}`} d={arc.d} />
+          ))
+        )}
+
+        <text className="pos-donut__value" x={c} y={c - 2} textAnchor="middle">
+          {centerValue}
+        </text>
+        <text className="pos-donut__caption" x={c} y={c + 16} textAnchor="middle">
+          {centerLabel}
+        </text>
+      </svg>
+
+      <ul className="pos-donut__legend">
+        {arcs.map((arc) => (
+          <li key={arc.key}>
+            <span className={`pos-donut__dot pos-donut__slice--${arc.tone ?? 'brand'}`} aria-hidden />
+            <span className="pos-donut__legend-label">
+              <strong>{arc.label}</strong>
+              {arc.note && <small>{arc.note}</small>}
+            </span>
+            <span className="pos-donut__legend-value">
+              <strong>{arc.share.toFixed(0)}%</strong>
+              <small>{format(arc.value)}</small>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <ChartTable
+        visible={false}
+        caption={caption}
+        columns={['Segment', 'Share', 'Value']}
+        rows={arcs.map((arc) => [arc.label, `${arc.share.toFixed(0)}%`, format(arc.value)])}
+      />
     </div>
   )
 }

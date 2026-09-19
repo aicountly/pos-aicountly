@@ -564,6 +564,110 @@
 .pos-chart__bar--muted { fill: #b9d9ad; }
 .pos-chart__point { fill: var(--pos-brand); }
 
+/*
+ * A second series that is a peer, not a comparison.
+ *
+ * New customers beside returning ones are two measures of the same importance,
+ * so this one gets its own hue and its own area rather than the grey dashed
+ * treatment that says "this is last week". It is still dashed — at a longer
+ * rhythm than the comparison line — because the rule at the top of this file
+ * holds: nothing here may depend on telling two hues apart.
+ */
+.pos-chart__line--secondary {
+  stroke: var(--pos-series-2, #2f74d0);
+  stroke-width: 2.5;
+  stroke-dasharray: 9 5;
+}
+
+.pos-chart__area--secondary { fill: rgba(47, 116, 208, 0.09); }
+.pos-chart__point--secondary { fill: var(--pos-series-2, #2f74d0); }
+
+.pos-legend .pos-legend__swatch--secondary {
+  background: repeating-linear-gradient(90deg, var(--pos-series-2, #2f74d0) 0 9px, transparent 9px 14px);
+}
+
+/* --------------------------------------------------------------------------
+   Donut
+   -------------------------------------------------------------------------- */
+
+/*
+ * Stacked, not side by side.
+ *
+ * This ring lives in a panel a third of the content width, and a legend beside
+ * it gets about 90px — enough to break "3 or more bills on this POS" onto one
+ * word per line. The ring goes on top and the legend gets the full width, where
+ * a segment's definition reads as a sentence.
+ */
+.pos-donut {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+/* Outranks `.pos-chart svg { width: 100% }` above, which would otherwise
+   stretch the ring to the full width of the panel. */
+.pos-donut .pos-donut__svg { width: min(168px, 100%); flex: 0 0 auto; }
+
+.pos-donut__slice {
+  /* The separator is a stroke in the surface colour, so a 1% slice still has
+     width instead of being eaten by a gap. */
+  stroke: var(--pos-surface);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.pos-donut__ring { fill: none; stroke: currentColor; }
+.pos-donut__slice { fill: currentColor; }
+
+.pos-donut__slice--brand { color: #1d9a37; }
+.pos-donut__slice--brand-soft { color: #76ca88; }
+.pos-donut__slice--info { color: #2f74d0; }
+.pos-donut__slice--warning { color: #dd9a10; }
+.pos-donut__slice--accent { color: #d8437a; }
+.pos-donut__slice--muted { color: #aebbb2; }
+
+.pos-donut__value {
+  fill: var(--pos-text);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.pos-donut__caption { fill: var(--pos-muted); font-size: 9.5px; }
+
+.pos-donut__legend {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pos-donut__legend li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.pos-donut__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pos-donut__legend-label { min-width: 0; }
+.pos-donut__legend-label strong { display: block; font-size: 12.5px; font-weight: 600; }
+.pos-donut__legend-label small { display: block; color: var(--pos-muted); font-size: 11px; line-height: 1.35; }
+.pos-donut__legend-value { text-align: right; font-variant-numeric: tabular-nums; }
+.pos-donut__legend-value strong { display: block; font-size: 13px; }
+.pos-donut__legend-value small { display: block; color: var(--pos-muted); font-size: 11px; }
+
+.pos-donut__legend li + li { padding-top: 10px; border-top: 1px solid #f0f3f1; }
+
 .pos-legend {
   display: flex;
   flex-wrap: wrap;
