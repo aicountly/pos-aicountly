@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -198,6 +198,7 @@ function exportBoard(board: ControlsBoard, period: string): void {
 // ---------------------------------------------------------------------------
 
 export default function Controls() {
+  const navigate = useNavigate()
   const { terminalId, can, session } = usePos()
   const { filters, update, query } = useDashboardFilters()
   const { advanced, setAdvanced, activeCount } = useAdvancedFilters()
@@ -292,13 +293,16 @@ export default function Controls() {
       const target = event.target as HTMLElement | null
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
 
+      // Alt only, and only keys the browser does not already own. Counting a
+      // drawer and reconciling it are the same workflow here, so C and R open
+      // the same sheet rather than one of them being a near-miss.
       const key = event.key.toLowerCase()
-      if (key === 'c' && canClose) {
+      if ((key === 'c' || key === 'r') && canClose) {
         event.preventDefault()
         setSheet('reconcile')
-      } else if (key === 'r' && canClose) {
+      } else if (key === 'o' && openTill) {
         event.preventDefault()
-        setSheet('reconcile')
+        navigate('/')
       } else if (key === 's') {
         event.preventDefault()
         document.getElementById('cc-shifts')?.scrollIntoView({ block: 'start' })
@@ -308,7 +312,7 @@ export default function Controls() {
     window.addEventListener('keydown', onKey)
 
     return () => window.removeEventListener('keydown', onKey)
-  }, [canClose])
+  }, [canClose, openTill, navigate])
 
   // ---- actions -------------------------------------------------------------
 
@@ -316,7 +320,7 @@ export default function Controls() {
     const actions: QuickAction[] = []
 
     if (openTill) {
-      actions.push({ id: 'open', label: 'Open a till', tone: 'green', icon: <Store size={19} />, to: '/' })
+      actions.push({ id: 'open', label: 'Open a till', tone: 'green', icon: <Store size={19} />, to: '/', shortcut: 'Alt + O' })
     }
     if (canClose) {
       actions.push({ id: 'close', label: 'Close shift', tone: 'blue', icon: <ShieldCheck size={19} />, to: '/reports' })
