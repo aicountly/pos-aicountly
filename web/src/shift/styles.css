@@ -1,0 +1,1237 @@
+/**
+ * The Shift Report, scoped to .shift-report.
+ *
+ * It sits INSIDE .pos-workspace and borrows everything that screen already
+ * decided — the tokens, the type scale, the focus ring, the 44px touch floor —
+ * and adds only what a control screen needs that a dashboard does not: a denser
+ * card rhythm, a six-up metric strip, semantic risk tiles, and two compact
+ * financial tables.
+ *
+ * Three rules hold throughout, the same three the dashboards hold to:
+ *   • No meaning is carried by colour alone. Every risk tile has words in it,
+ *     every chart has a table underneath, every status says what it is.
+ *   • Anything a finger presses is at least 44px tall on a touch screen.
+ *   • Nothing animates for a viewer who asked it not to.
+ *
+ * THE SERIES PALETTE. Eight fixed hues, assigned in order and never cycled,
+ * validated for protanopia and deuteranopia separation against this surface
+ * rather than chosen by eye. Slot 1 is Aicountly's green one step darker than
+ * the brand mark, which is what the brand green needs to clear 3:1 on white.
+ * A ninth tender folds into "Other" in grey; it never invents a hue.
+ */
+
+.shift-report {
+  --shift-series-1: #1a8f06;
+  --shift-series-2: #2a78d6;
+  --shift-series-3: #eb6834;
+  --shift-series-4: #4a3aa7;
+  --shift-series-5: #1baf7a;
+  --shift-series-6: #e34948;
+  --shift-series-7: #eda100;
+  --shift-series-8: #e87ba4;
+  --shift-series-other: #8b978f;
+
+  --shift-gap: 12px;
+  --shift-radius: 14px;
+  --shift-line: #edf1ee;
+  --shift-rule: var(--pos-border, #dfe7e1);
+  --shift-tint: var(--surface-2, #fbfcfb);
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--shift-gap);
+  align-content: start;
+}
+
+/* --------------------------------------------------------------------------
+   Page header
+   -------------------------------------------------------------------------- */
+
+.shift-report__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 2px;
+}
+
+.shift-report__title {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.shift-report__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: var(--pos-soft-green, #edf8e9);
+  color: var(--pos-action, #177d08);
+}
+
+.shift-report__title h1 {
+  font-size: clamp(22px, 2vw, 28px);
+  letter-spacing: -0.03em;
+}
+
+.shift-report__title p {
+  margin: 4px 0 0;
+  color: var(--pos-muted, #5e6e64);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.shift-report__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* A label for a control that does not need a visible one beside it in a row
+   this dense — the accessible name still comes from here. */
+.shift-report__controls label {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.shift-report .shift-control {
+  min-height: 38px;
+  max-width: 100%;
+  padding: 7px 30px 7px 11px;
+  border: 1px solid var(--shift-rule);
+  border-radius: 10px;
+  background:
+    /* The chevron, drawn rather than shipped: one glyph is not worth a request. */
+    linear-gradient(45deg, transparent 50%, var(--pos-muted, #5e6e64) 50%) calc(100% - 15px) 51% / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--pos-muted, #5e6e64) 50%, transparent 50%) calc(100% - 10px) 51% / 5px 5px no-repeat,
+    var(--pos-surface, #fff);
+  color: var(--pos-text, #17251d);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.shift-report .shift-control:hover:not(:disabled) { border-color: var(--border-strong, #c8d5cc); }
+.shift-report .shift-control:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/*
+ * The date control.
+ *
+ * "05/26/2026" is what a native date input renders, and on a screen read by
+ * someone in a hurry it is the wrong way round half the world over. So the
+ * visible text is the written date and the real <input type="date"> sits over
+ * it, transparent and full size: the browser's own picker, its own keyboard
+ * handling and its own mobile behaviour, under a label a person can read.
+ */
+.shift-report .shift-date {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid var(--shift-rule);
+  border-radius: 10px;
+  background: var(--pos-surface, #fff);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 150ms ease;
+}
+
+.shift-report .shift-date:hover { border-color: var(--border-strong, #c8d5cc); }
+
+.shift-report .shift-date:focus-within {
+  outline: 3px solid var(--pos-action, #177d08);
+  outline-offset: 3px;
+}
+
+.shift-report .shift-date input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font: inherit;
+  opacity: 0;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .shift-report .shift-date { min-height: 44px; }
+}
+
+.shift-report .shift-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid var(--shift-rule);
+  border-radius: 10px;
+  background: var(--pos-surface, #fff);
+  color: var(--pos-text, #17251d);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.shift-report .shift-button:hover:not(:disabled) {
+  border-color: var(--border-strong, #c8d5cc);
+  background: var(--shift-tint);
+}
+
+.shift-report .shift-button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.shift-report .shift-button--primary {
+  border-color: var(--pos-action, #177d08);
+  background: var(--pos-action, #177d08);
+  color: #fff;
+  padding-inline: 16px;
+  box-shadow: 0 5px 14px rgba(23, 125, 8, 0.16);
+}
+
+.shift-report .shift-button--primary:hover:not(:disabled) {
+  background: var(--accent-hover, #116006);
+  border-color: var(--accent-hover, #116006);
+}
+
+.shift-report .shift-button--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pos-action, #177d08);
+}
+
+.shift-report .shift-button--quiet:hover:not(:disabled) { background: var(--pos-soft-green, #edf8e9); }
+
+/* On a touch screen every one of these is a finger target. */
+@media (pointer: coarse) {
+  .shift-report .shift-control,
+  .shift-report .shift-button {
+    min-height: 44px;
+  }
+}
+
+.shift-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.shift-chip--ok { background: var(--success-bg, #edf8e9); color: var(--success, #216f13); }
+.shift-chip--warn { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+
+.shift-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   Cards
+   -------------------------------------------------------------------------- */
+
+.shift-card {
+  min-width: 0;
+  padding: 15px 16px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: var(--shift-radius);
+  background: var(--pos-surface, #fff);
+  box-shadow: var(--pos-shadow, 0 5px 20px rgba(24, 50, 31, 0.045));
+}
+
+.shift-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.shift-card__head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.shift-card__head p {
+  margin: 4px 0 0;
+  color: var(--pos-muted, #5e6e64);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.shift-card__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--pos-soft-green, #edf8e9);
+  color: var(--pos-action, #177d08);
+  flex: 0 0 auto;
+}
+
+.shift-card__note {
+  margin: 12px 0 0;
+  color: var(--pos-muted, #5e6e64);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   KPI strip
+   -------------------------------------------------------------------------- */
+
+.shift-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--shift-gap);
+}
+
+.shift-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  min-height: 116px;
+  padding: 14px 15px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: var(--shift-radius);
+  background: var(--pos-surface, #fff);
+  box-shadow: var(--pos-shadow, 0 5px 20px rgba(24, 50, 31, 0.045));
+}
+
+.shift-kpi__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.shift-kpi__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--pos-soft-green, #edf8e9);
+  color: var(--pos-action, #177d08);
+}
+
+.shift-kpi__label {
+  color: var(--pos-text-secondary, #526074);
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.shift-kpi__value {
+  font-size: clamp(19px, 1.6vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  /* break-word, never `anywhere`: `anywhere` splits ₹4,382.40 mid-number and
+     it reads as two figures. */
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.shift-kpi__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  min-width: 0;
+}
+
+.shift-kpi__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The arrow says the direction and the colour says whether that is good news.
+   They are separate on purpose: fewer refunds is a fall and a win. */
+.shift-kpi__delta--good { color: var(--success, #216f13); }
+.shift-kpi__delta--bad { color: var(--danger, #aa2929); }
+.shift-kpi__delta--flat { color: var(--pos-muted, #5e6e64); }
+
+.shift-kpi__since {
+  display: block;
+  margin-top: 2px;
+  color: var(--pos-muted, #5e6e64);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.shift-kpi__spark {
+  flex: 0 0 auto;
+  width: 62px;
+  height: 26px;
+  overflow: visible;
+}
+
+/* --------------------------------------------------------------------------
+   Shift summary
+   -------------------------------------------------------------------------- */
+
+.shift-summary__state {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.shift-summary__badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 11px;
+  background: var(--shift-tint);
+}
+
+.shift-summary__badge--ok { border-color: var(--brand-line, #cfe7c6); background: var(--success-bg, #edf8e9); }
+.shift-summary__badge--warn { border-color: #f0dfb8; background: var(--warning-bg, #fff4dc); }
+.shift-summary__badge--danger { border-color: #f2cfcf; background: var(--danger-bg, #ffeded); }
+
+.shift-summary__mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--pos-action, #177d08);
+  color: #fff;
+}
+
+.shift-summary__mark--warn { background: var(--warning, #805500); }
+.shift-summary__mark--danger { background: var(--danger, #aa2929); }
+
+.shift-summary__badge strong { display: block; font-size: 12.5px; }
+.shift-summary__badge small { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; line-height: 1.4; }
+
+.shift-summary__duration {
+  min-width: 118px;
+  padding: 8px 14px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 11px;
+  background: var(--shift-tint);
+}
+
+.shift-summary__duration small { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; }
+.shift-summary__duration strong { display: block; margin: 2px 0; font-size: 19px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.shift-summary__duration span { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+.shift-facts {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--shift-line);
+}
+
+.shift-fact {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 2px 12px;
+  border-right: 1px solid var(--shift-line);
+}
+
+.shift-fact:first-child { padding-left: 0; }
+.shift-fact:last-child { border-right: 0; padding-right: 0; }
+
+.shift-fact__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 29px;
+  height: 29px;
+  border-radius: 9px;
+  background: #f2f6f4;
+  color: #52677a;
+}
+
+.shift-fact__body { min-width: 0; }
+.shift-fact__body small { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; }
+
+.shift-fact__body strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: break-word;
+}
+
+.shift-fact__body strong.is-danger { color: var(--danger, #aa2929); }
+.shift-fact__body strong.is-warning { color: var(--warning, #805500); }
+.shift-fact__body strong.is-good { color: var(--success, #216f13); }
+
+/* --------------------------------------------------------------------------
+   Analytics row
+   -------------------------------------------------------------------------- */
+
+.shift-analytics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.45fr) minmax(0, 1.1fr);
+  align-items: stretch;
+  gap: var(--shift-gap);
+}
+
+.shift-analytics > .shift-card { display: flex; flex-direction: column; }
+
+/* The legend needs room for a name, a share and an amount. Where the card is
+   too narrow for all three beside the ring, the legend drops underneath rather
+   than clipping "Gift card" to "Gift". */
+.shift-mix {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.shift-mix__chart { flex: 0 0 auto; width: 124px; }
+.shift-mix__chart svg { display: block; width: 100%; height: auto; }
+
+.shift-mix__legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 10px;
+  flex: 1 1 208px;
+  min-width: 0;
+  font-size: 11.5px;
+}
+
+.shift-mix__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shift-mix__swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.shift-mix__pc,
+.shift-mix__amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.shift-mix__pc { font-weight: 700; }
+.shift-mix__amount { color: var(--pos-text-secondary, #526074); }
+
+.shift-trend { position: relative; margin-top: 12px; min-width: 0; }
+.shift-trend svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+
+.shift-trend__grid { stroke: var(--shift-line); stroke-width: 1; }
+.shift-trend__axis { fill: var(--pos-muted, #5e6e64); font-size: 10px; }
+.shift-trend__area { fill: var(--shift-series-1); opacity: 0.1; }
+.shift-trend__line { fill: none; stroke: var(--shift-series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.shift-trend__cross { stroke: var(--border-strong, #c8d5cc); stroke-width: 1; }
+.shift-trend__dot { fill: var(--shift-series-1); stroke: var(--pos-surface, #fff); stroke-width: 2; }
+
+.shift-tooltip {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -100%);
+  padding: 7px 10px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 9px;
+  background: var(--pos-surface, #fff);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.shift-tooltip small { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; }
+.shift-tooltip strong { display: block; margin-top: 1px; font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.shift-total {
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+.shift-total small { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; }
+.shift-total strong { display: block; font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+.shift-channels {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  min-width: 0;
+}
+
+.shift-channel {
+  display: grid;
+  grid-template-columns: minmax(74px, 0.85fr) minmax(50px, 1.5fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  font-size: 11.5px;
+}
+
+.shift-channel__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `display: block` is load-bearing on both. These are spans — a span is inline
+   by default, an inline box ignores width and height, and the fill silently
+   does not draw. */
+.shift-channel__track {
+  display: block;
+  height: 9px;
+  border-radius: 999px;
+  background: #eef2ef;
+  overflow: hidden;
+}
+
+.shift-channel__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  /* Square where it leaves the baseline, rounded at the data end. */
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  background: var(--shift-series-1);
+}
+
+.shift-channel__count { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.shift-channel__pc { color: var(--pos-muted, #5e6e64); text-align: right; font-variant-numeric: tabular-nums; min-width: 32px; }
+
+/* --------------------------------------------------------------------------
+   Risk monitor
+   -------------------------------------------------------------------------- */
+
+.shift-risk {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.shift-risk__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  min-height: 76px;
+  padding: 11px 12px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 11px;
+  background: var(--shift-tint);
+  font: inherit;
+  color: var(--pos-text, #17251d);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.shift-risk__tile:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+}
+
+.shift-risk__tile:disabled { cursor: default; }
+
+.shift-risk__tile--warning { border-color: #f0dfb8; background: var(--warning-bg, #fff4dc); }
+.shift-risk__tile--danger { border-color: #f2cfcf; background: var(--danger-bg, #ffeded); }
+
+.shift-risk__label {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.shift-risk__count { font-size: 19px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.shift-risk__action { font-size: 10.5px; font-weight: 650; line-height: 1.3; color: var(--pos-muted, #5e6e64); }
+.shift-risk__tile--warning .shift-risk__action { color: var(--warning, #805500); }
+.shift-risk__tile--danger .shift-risk__action { color: var(--danger, #aa2929); }
+
+/* --------------------------------------------------------------------------
+   Bottom row — cash and the trail
+   -------------------------------------------------------------------------- */
+
+.shift-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  align-items: start;
+  gap: var(--shift-gap);
+}
+
+.shift-cash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 172px;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.shift-cash__summary { display: grid; gap: 8px; align-content: start; }
+
+.shift-cash__figure {
+  padding: 9px 11px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 10px;
+  background: var(--shift-tint);
+}
+
+.shift-cash__figure small { display: block; color: var(--pos-muted, #5e6e64); font-size: 10.5px; }
+.shift-cash__figure strong { display: block; margin-top: 2px; font-size: 15px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+.shift-cash__figure--good { border-color: var(--brand-line, #cfe7c6); background: var(--success-bg, #edf8e9); }
+.shift-cash__figure--good strong { color: var(--success, #216f13); }
+.shift-cash__figure--warn { border-color: #f0dfb8; background: var(--warning-bg, #fff4dc); }
+.shift-cash__figure--warn strong { color: var(--warning, #805500); }
+.shift-cash__figure--danger { border-color: #f2cfcf; background: var(--danger-bg, #ffeded); }
+.shift-cash__figure--danger strong { color: var(--danger, #aa2929); }
+
+/* `position: relative` is load-bearing: the visually-hidden spans inside these
+   tables are absolutely positioned, and without a positioned ancestor their
+   containing block is the viewport — they escape the scroller and push the
+   whole page sideways. */
+.shift-scroll {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.shift-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.shift-table th {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--shift-line);
+  background: #f2f6f4;
+  color: #5b6a72;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.shift-table td {
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--shift-line);
+  color: #39465a;
+  vertical-align: middle;
+}
+
+/* A row header — the denomination a row is about. It is a <th> for the screen
+   reader, and reads as an ordinary first cell to everyone else. */
+.shift-table tbody th {
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--shift-line);
+  background: none;
+  color: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.shift-table tbody tr:last-child td,
+.shift-table tbody tr:last-child th { border-bottom: 0; }
+.shift-table tbody tr:hover { background: #fafcfa; }
+.shift-table .is-number { text-align: right; font-variant-numeric: tabular-nums; }
+.shift-table .is-muted { color: var(--pos-muted, #5e6e64); }
+.shift-table .is-danger { color: var(--danger, #aa2929); font-weight: 650; }
+.shift-table tfoot td {
+  padding: 8px 9px;
+  border-top: 1px solid var(--border-strong, #c8d5cc);
+  font-weight: 700;
+  color: var(--pos-text, #17251d);
+}
+
+.shift-table__lead { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+
+.shift-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--pos-muted, #5e6e64);
+}
+
+.shift-dot--normal { background: var(--success, #216f13); }
+.shift-dot--review { background: var(--warning, #805500); }
+.shift-dot--exception { background: var(--danger, #aa2929); }
+
+.shift-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--pos-muted, #5e6e64);
+  font-size: 11px;
+}
+
+.shift-pager__buttons { display: flex; gap: 6px; }
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+
+.shift-report__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 2px 0;
+  color: var(--pos-muted, #5e6e64);
+  font-size: 11px;
+}
+
+.shift-report__footer span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* --------------------------------------------------------------------------
+   Drawer and dialog
+   -------------------------------------------------------------------------- */
+
+.shift-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  padding: 0;
+  background: rgba(23, 37, 29, 0.38);
+  cursor: pointer;
+}
+
+.shift-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100vw);
+  background: var(--pos-surface, #fff);
+  border-left: 1px solid var(--pos-border, #dfe7e1);
+  box-shadow: -12px 0 40px rgba(24, 50, 31, 0.13);
+}
+
+.shift-dialog {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: min(620px, calc(100vw - 24px));
+  max-height: min(88vh, 860px);
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 16px;
+  background: var(--pos-surface, #fff);
+  box-shadow: 0 24px 60px rgba(24, 50, 31, 0.22);
+}
+
+.shift-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--shift-line);
+}
+
+.shift-panel__head h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.shift-panel__head p { margin: 4px 0 0; color: var(--pos-muted, #5e6e64); font-size: 12px; }
+
+.shift-panel__body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+.shift-panel__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--shift-line);
+  background: var(--shift-tint);
+  border-radius: 0 0 16px 16px;
+}
+
+.shift-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 9px;
+  background: var(--pos-surface, #fff);
+  color: var(--pos-muted, #5e6e64);
+  cursor: pointer;
+}
+
+.shift-close:hover { color: var(--pos-text, #17251d); border-color: var(--border-strong, #c8d5cc); }
+
+/* The reconcile workflow */
+
+.shift-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--pos-muted, #5e6e64);
+}
+
+.shift-steps__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--shift-tint);
+  border: 1px solid var(--pos-border, #dfe7e1);
+  font-weight: 650;
+}
+
+.shift-steps__item[aria-current='step'] {
+  background: var(--pos-soft-green, #edf8e9);
+  border-color: var(--brand-line, #cfe7c6);
+  color: var(--pos-action, #177d08);
+}
+
+.shift-steps__item--done { color: var(--success, #216f13); }
+
+.shift-count {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.shift-count__row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 10px;
+  background: var(--shift-tint);
+}
+
+.shift-count__face { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.shift-count__amount { display: block; color: var(--pos-muted, #5e6e64); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+.shift-report .shift-count__row input {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 8px;
+  background: var(--pos-surface, #fff);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.shift-report .shift-field { display: block; }
+.shift-report .shift-field > span { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 650; }
+
+.shift-report .shift-field textarea {
+  width: 100%;
+  min-height: 74px;
+  padding: 9px 11px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 10px;
+  background: var(--pos-surface, #fff);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.shift-review {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* --------------------------------------------------------------------------
+   States
+   -------------------------------------------------------------------------- */
+
+.shift-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 1px solid var(--pos-border, #dfe7e1);
+  border-radius: 12px;
+  background: var(--shift-tint);
+  color: var(--pos-text, #17251d);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.shift-note--danger { border-color: #f2cfcf; background: var(--danger-bg, #ffeded); }
+.shift-note--warning { border-color: #f0dfb8; background: var(--warning-bg, #fff4dc); }
+.shift-note--success { border-color: var(--brand-line, #cfe7c6); background: var(--success-bg, #edf8e9); }
+.shift-note strong { display: block; margin-bottom: 2px; }
+
+.shift-empty {
+  padding: 30px 18px;
+  border: 1px dashed var(--pos-border, #dfe7e1);
+  border-radius: var(--shift-radius);
+  background: var(--pos-surface, #fff);
+  text-align: center;
+}
+
+.shift-empty h2 { margin: 0 0 6px; font-size: 15px; }
+.shift-empty p { margin: 0 auto; max-width: 42ch; color: var(--pos-muted, #5e6e64); font-size: 12.5px; }
+
+/* The skeleton mirrors the real layout, so nothing jumps when data lands. */
+.shift-skeleton {
+  border-radius: var(--shift-radius);
+  background: linear-gradient(100deg, #eef2ef 30%, #f7faf8 50%, #eef2ef 70%);
+  background-size: 300% 100%;
+  animation: shift-shimmer 1.4s linear infinite;
+}
+
+/* The one thing that spins: a button that is waiting on the server. */
+.shift-spin { animation: shift-spin 900ms linear infinite; }
+
+@keyframes shift-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shift-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -150% 0; }
+}
+
+.shift-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 12px 15px;
+  border: 1px solid var(--brand-line, #cfe7c6);
+  border-radius: 12px;
+  background: var(--success-bg, #edf8e9);
+  color: var(--success, #216f13);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(24, 50, 31, 0.075));
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shift-toast--danger { border-color: #f2cfcf; background: var(--danger-bg, #ffeded); color: var(--danger, #aa2929); }
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1500px) {
+  .shift-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shift-risk { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1280px) {
+  .shift-analytics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shift-analytics > :nth-child(3) { grid-column: span 2; }
+  .shift-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 14px; }
+  .shift-fact:nth-child(3n) { border-right: 0; }
+}
+
+/* The denomination table has four columns and a 172px panel beside it; below
+   this the two together start clipping rather than scrolling gracefully, so
+   the panel goes underneath while the card itself stays in its column. */
+@media (max-width: 1500px) {
+  .shift-cash { grid-template-columns: minmax(0, 1fr); }
+  .shift-cash__summary { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+}
+
+@media (max-width: 1200px) {
+  .shift-bottom { grid-template-columns: minmax(0, 1fr); }
+  .shift-report__controls { justify-content: flex-start; }
+}
+
+@media (max-width: 860px) {
+  .shift-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shift-risk { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shift-analytics { grid-template-columns: minmax(0, 1fr); }
+  .shift-analytics > :nth-child(3) { grid-column: auto; }
+  .shift-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shift-fact { border-right: 0; padding-left: 0; }
+  .shift-cash { grid-template-columns: minmax(0, 1fr); }
+  .shift-mix { flex-direction: column; align-items: flex-start; }
+  .shift-mix__legend { width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .shift-kpis,
+  .shift-risk,
+  .shift-facts { grid-template-columns: minmax(0, 1fr); }
+  .shift-report__controls > * { flex: 1 1 auto; }
+  .shift-drawer { width: 100vw; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shift-report *,
+  .shift-report *::before,
+  .shift-report *::after,
+  .shift-drawer,
+  .shift-dialog,
+  .shift-skeleton,
+  .shift-spin {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Print — the Export PDF path
+   --------------------------------------------------------------------------
+   POS has no report service, so "Export PDF" prints this screen through the
+   browser's own PDF writer. That is a real output rather than a screenshot:
+   the page is re-laid-out here as a report — the shell, the filters and every
+   control drop away, the cards flatten onto the paper, and the hidden tables
+   under each chart become the chart's data.
+   -------------------------------------------------------------------------- */
+
+@media print {
+  @page { margin: 12mm; size: A4 portrait; }
+
+  body { background: #fff; }
+
+  .shell-sidebar,
+  .shell-header,
+  .shell-scrim,
+  .shift-report__controls,
+  .shift-pager,
+  .shift-scrim,
+  .shift-drawer,
+  .shift-dialog,
+  .shift-toast { display: none !important; }
+
+  .shell,
+  .shell-main,
+  .shell-content { display: block !important; height: auto !important; overflow: visible !important; }
+
+  .pos-workspace.shift-report { padding: 0; background: #fff; }
+
+  .shift-report__print { display: block !important; }
+
+  .shift-card,
+  .shift-kpi {
+    box-shadow: none;
+    border-color: #c8d5cc;
+    break-inside: avoid;
+  }
+
+  .shift-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shift-risk { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shift-analytics,
+  .shift-bottom { grid-template-columns: minmax(0, 1fr); }
+  .shift-scroll { overflow: visible; }
+  .shift-table { font-size: 10px; }
+
+  /* A chart is a picture on paper and unreadable in greyscale; its table is
+     the data, so on paper the table is what prints. */
+  .shift-report .pos-visually-hidden {
+    position: static;
+    clip-path: none;
+    clip: auto;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    white-space: normal;
+  }
+
+  .shift-mix__chart,
+  .shift-trend svg,
+  .shift-kpi__spark { display: none; }
+}
+
+.shift-report__print { display: none; }

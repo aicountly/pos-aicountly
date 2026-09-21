@@ -66,8 +66,16 @@ final class RegisterService
         }
 
         $float = self::amount($input['opening_float'] ?? 0);
+        $sheet = self::denominationSheet($input['denominations'] ?? null);
+        if ($sheet !== null && abs($sheet['total'] - $float) > 0.0099) {
+            Http::validationFailed(
+                'The notes and coins add up to ' . number_format($sheet['total'], 2)
+                . ', not ' . number_format($float, 2) . '. Check the count.',
+                ['field' => 'denominations', 'sheet_total' => $sheet['total'], 'opening_float' => $float],
+            );
+        }
 
-        return Db::transaction(function () use ($terminalId, $float, $input) {
+        return Db::transaction(function () use ($terminalId, $float, $input, $sheet) {
             $open = Db::first(
                 "SELECT session_id, opened_by FROM pos_register_sessions
                  WHERE cmp_id = :cmp AND terminal_id = :terminal AND status IN ('OPEN', 'CLOSING')
@@ -93,7 +101,13 @@ final class RegisterService
             ], 'session_id');
 
             if ($float > 0) {
-                $this->recordDrawerEvent($sessionId, 'opening_float', $float, 'Opening float');
+                $this->recordDrawerEvent(
+                    $sessionId,
+                    'opening_float',
+                    $float,
+                    'Opening float',
+                    $sheet === null ? [] : ['denominations' => $sheet['rows']],
+                );
             }
 
             Audit::record($this->ctx, $this->auth, 'shift.opened', 'register_session', $sessionId, null, [
@@ -136,11 +150,27 @@ final class RegisterService
             );
         }
 
-        if (!array_key_exists('counted_cash', $input)) {
+        // The sheet, when the drawer was counted note by note. It is evidence
+        // for the figure rather than a second source of it: where both arrive
+        // they have to agree, and a sheet on its own produces the figure.
+        $sheet = self::denominationSheet($input['denominations'] ?? null);
+
+        if (!array_key_exists('counted_cash', $input) && $sheet === null) {
             Http::validationFailed('Count the drawer before closing the shift.', ['field' => 'counted_cash']);
         }
 
-        $counted  = self::amount($input['counted_cash']);
+        $counted = array_key_exists('counted_cash', $input)
+            ? self::amount($input['counted_cash'])
+            : self::amount($sheet['total']);
+
+        if ($sheet !== null && abs($sheet['total'] - $counted) > 0.0099) {
+            Http::validationFailed(
+                'The notes and coins add up to ' . number_format($sheet['total'], 2)
+                . ', not ' . number_format($counted, 2) . '. Check the count.',
+                ['field' => 'denominations', 'sheet_total' => $sheet['total'], 'counted_cash' => $counted],
+            );
+        }
+
         $expected = (float) $session['expected_cash'];
         $variance = round($counted - $expected, 4);
         $reason   = self::text($input['variance_reason'] ?? null);
@@ -159,8 +189,14 @@ final class RegisterService
             }
         }
 
-        return Db::transaction(function () use ($sessionId, $session, $counted, $variance, $reason) {
-            $this->recordDrawerEvent($sessionId, 'closing_count', $counted, 'Drawer counted at close');
+        return Db::transaction(function () use ($sessionId, $session, $counted, $variance, $reason, $sheet) {
+            $this->recordDrawerEvent(
+                $sessionId,
+                'closing_count',
+                $counted,
+                'Drawer counted at close',
+                $sheet === null ? [] : ['denominations' => $sheet['rows']],
+            );
 
             Db::update('pos_register_sessions', [
                 'status'          => 'CLOSED',
@@ -399,7 +435,8 @@ final class RegisterService
         return $row === null ? [] : $this->hydrate($row);
     }
 
-    private function recordDrawerEvent(int $sessionId, string $kind, float $amount, ?string $reason): void
+    /** @param array<string, mixed> $detail operational evidence, never an accounting entry */
+    private function recordDrawerEvent(int $sessionId, string $kind, float $amount, ?string $reason, array $detail = []): void
     {
         Db::insert('pos_cash_drawer_events', [
             'session_id' => $sessionId,
@@ -408,7 +445,49 @@ final class RegisterService
             'amount'     => $amount,
             'reason'     => $reason,
             'actor_uuid' => $this->auth->uuid,
+            'detail'     => $detail,
         ], 'event_id');
+    }
+
+    /**
+     * The notes and coins a drawer was counted in.
+     *
+     * Kept as evidence beside the figure, because "counted 32,400" throws away
+     * the count that produced it and a disputed drawer is argued from the
+     * sheet. A quantity is a whole number of notes; a denomination is what the
+     * shop counts in and is not checked against a fixed list, because POS is
+     * not the product that decides what money looks like.
+     *
+     * @return array{rows: list<array<string, float|int>>, total: float}|null
+     */
+    private static function denominationSheet(mixed $raw): ?array
+    {
+        if (!is_array($raw) || $raw === []) {
+            return null;
+        }
+
+        $rows = [];
+        $total = 0.0;
+        foreach ($raw as $entry) {
+            if (!is_array($entry) || !isset($entry['denomination']) || !is_numeric($entry['denomination'])) {
+                Http::validationFailed('Each line of the count needs a denomination and a quantity.', ['field' => 'denominations']);
+            }
+            $value = round((float) $entry['denomination'], 4);
+            $qty   = (int) ($entry['quantity'] ?? 0);
+            if ($value <= 0 || $qty < 0) {
+                Http::validationFailed('A denomination is more than nothing, and a quantity is not negative.', ['field' => 'denominations']);
+            }
+            if ($qty === 0) {
+                continue;
+            }
+
+            $amount = round($value * $qty, 4);
+            $total += $amount;
+            $rows[] = ['denomination' => $value, 'quantity' => $qty, 'amount' => $amount];
+        }
+
+        // Every line zero is still a count — of an empty drawer.
+        return ['rows' => $rows, 'total' => round($total, 4)];
     }
 
     /** @param array<string, mixed> $row */
