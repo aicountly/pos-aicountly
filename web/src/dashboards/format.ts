@@ -121,3 +121,56 @@ export function titleCase(value: string): string {
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
+
+/**
+ * A rupee figure short enough for a chart axis or a donut's middle.
+ *
+ * Lakhs and crores, because that is how the figure is said aloud in the shops
+ * this runs in — ₹2.35Cr, not ₹23,50,00,000 squeezed under a bar.
+ *
+ * NEVER USED IN A TABLE, A TOOLTIP OR A TOTAL. Rounding to two significant
+ * decimals loses up to ₹4,999 on a crore, which is fine for the height of a bar
+ * and not fine anywhere a number is being reconciled. `money` and `moneyExact`
+ * are what those cells use.
+ */
+export function compactMoney(value: number | null | undefined, currency = 'INR'): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+
+  const symbol = currency === 'INR' ? '₹' : ''
+  const sign = value < 0 ? '-' : ''
+  const magnitude = Math.abs(value)
+
+  if (currency !== 'INR') return money(value, currency)
+  if (magnitude >= 10000000) return `${sign}${symbol}${trim(magnitude / 10000000)}Cr`
+  if (magnitude >= 100000) return `${sign}${symbol}${trim(magnitude / 100000)}L`
+
+  return money(value, currency)
+}
+
+function trim(value: number): string {
+  // 1.2, not 1.20; 12, not 12.0. A shortened figure with a trailing zero reads
+  // like a precision it does not have.
+  return value
+    .toFixed(value >= 10 ? 1 : 2)
+    .replace(/\.?0+$/, '')
+}
+
+/** "+12.4%", "-6.0%", "0%". Signed, because the sign is the whole point. */
+export function signedPercent(value: number | null | undefined, places = 1): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+  if (Math.abs(value) < 0.05) return '0%'
+
+  return `${value > 0 ? '+' : '−'}${percent(Math.abs(value), places)}`
+}
+
+/**
+ * How one figure compares with another, as a percentage change.
+ *
+ * Null when the base is zero or missing: a change from nothing is not a
+ * percentage, and "up ∞%" is not a fact about a shop.
+ */
+export function changePc(current: number, previous: number | null | undefined): number | null {
+  if (previous === null || previous === undefined || !Number.isFinite(previous) || previous === 0) return null
+
+  return ((current - previous) / previous) * 100
+}
