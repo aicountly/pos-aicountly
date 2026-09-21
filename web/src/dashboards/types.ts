@@ -31,6 +31,10 @@ export interface InsightItem {
   period_label: string
   evidence_href?: string | null
   action_label?: string | null
+  /** The one short figure the strip shows. Absent on boards that send none. */
+  metric?: string | null
+  /** The line under it. Same numbers as `explanation`, fewer words. */
+  detail?: string | null
 }
 
 export interface InsightBlock {
@@ -38,6 +42,18 @@ export interface InsightBlock {
   ai: { available: false; reason: string; note: string }
   generated_at: string
   sufficient_data?: boolean
+  /** What the strip counted over, for its "based on…" line. */
+  context?: { outlets: number; bills: number; items: number }
+}
+
+export interface ReturnVoidReason {
+  kind: 'return' | 'void'
+  reason: string
+  display_name: string
+  count: number
+  amount: number
+  /** False on a void: the figure sizes the bill, it is not money that moved. */
+  amount_is_money: boolean
 }
 
 export interface TenderLine {
@@ -63,15 +79,25 @@ export interface OverviewBoard {
     discount: number
     estimated_tax: number
     average_bill: number
+    /** Completed bills carrying any discount. The denominator is `bills`. */
+    discounted_bills: number
     returns_count: number
     returns_value: number
     active_tills: number
     open_shifts: number
   }
-  comparison: { label: string | null; bills: number; net: number; average_bill: number } | null
+  comparison: {
+    label: string | null
+    bills: number
+    net: number
+    average_bill: number
+    discounted_bills: number
+    returns_count: number
+    returns_value: number
+  } | null
   series: {
     bucket: 'hour' | 'day'
-    points: Array<{ bucket: string; bills: number; net: number }>
+    points: Array<{ bucket: string; bills: number; net: number; returns: number }>
     comparison_by_bucket: Record<string, number> | null
   }
   outlets: Array<{
@@ -94,6 +120,30 @@ export interface OverviewBoard {
     amount: number
     returned_qty: number
   }>
+  /**
+   * Why money went back, split by what actually happened.
+   *
+   * A return moved goods and raised a credit; a void cancelled a bill that was
+   * never taken. `amount_is_money` is false on a void row for exactly that
+   * reason, and the screen must not total the two columns together.
+   */
+  returns_voids: {
+    returns: ReturnVoidReason[]
+    voids: ReturnVoidReason[]
+    totals: {
+      returns_count: number
+      returns_value: number
+      voids_count: number
+      voids_value: number
+    }
+    note: string
+  }
+  /** Business day of week (1 = Monday) against wall-clock hour in the outlet's timezone. */
+  activity: {
+    cells: Array<{ dow: number; hour: number; bills: number; net: number }>
+    timezone: string
+    basis: string
+  }
   margin:
     | { available: false; reason: string; note: string }
     | {

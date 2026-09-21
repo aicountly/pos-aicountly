@@ -83,11 +83,16 @@ export default function Restaurant() {
                 ? 'No tables set up yet'
                 : `${percent(metrics.occupancyPc, 0)} occupancy · ${count(metrics.covers)} covers`,
             progress:
-              metrics.occupancyPc === null
+              data.kpis.tables_total === 0
                 ? null
-                : { value: metrics.occupancyPc, label: `${metrics.occupancyPc}% of tables seated` },
-            tone: 'green',
-            icon: <Coffee size={19} />,
+                : {
+                    value: data.kpis.tables_occupied,
+                    max: data.kpis.tables_total,
+                    label: `${metrics.occupancyPc ?? 0}% of tables seated`,
+                  },
+            tone: 'brand',
+            accent: 'green',
+            icon: <Coffee size={18} />,
             hint: 'Tables with an open dine-in session right now. Live — the date filter does not change it.',
             href: '/floor',
           },
@@ -96,8 +101,9 @@ export default function Restaurant() {
             label: 'Active orders',
             value: count(data.kpis.open_orders),
             context: `${count(data.kpis.tickets_pending)} in the kitchen · ${count(data.kpis.orders_ready)} ready to serve`,
-            tone: 'blue',
-            icon: <ReceiptText size={19} />,
+            tone: 'info',
+            accent: 'blue',
+            icon: <ReceiptText size={18} />,
             hint: 'Restaurant orders started and not yet settled, whatever the date filter says.',
             href: '/floor',
           },
@@ -109,8 +115,9 @@ export default function Restaurant() {
               ? `Over ${count(data.serve.sampled)} ticket${data.serve.sampled === 1 ? '' : 's'} served`
               : 'No ticket was marked served in this period',
             comparison: serveComparison(data.serve),
-            tone: 'orange',
-            icon: <Clock size={19} />,
+            tone: 'warning',
+            accent: 'orange',
+            icon: <Clock size={18} />,
             hint: data.serve.basis,
             href: '/kitchen',
           },
@@ -120,8 +127,9 @@ export default function Restaurant() {
             value: money(data.sales.net),
             context: `${count(data.sales.orders)} settled order${data.sales.orders === 1 ? '' : 's'} in this period`,
             comparison: salesComparison(data.sales),
-            tone: 'purple',
-            icon: <IndianRupee size={19} />,
+            tone: 'brand',
+            accent: 'purple',
+            icon: <IndianRupee size={18} />,
             hint: data.sales.basis,
           },
           {
@@ -131,8 +139,9 @@ export default function Restaurant() {
             // feedback at all, and a figure here would be invented.
             value: null,
             context: 'Not collected in POS',
-            tone: 'cyan',
-            icon: <Star size={19} />,
+            tone: 'neutral',
+            accent: 'cyan',
+            icon: <Star size={18} />,
             hint: data.rating.note,
           },
         ]
@@ -154,12 +163,12 @@ export default function Restaurant() {
           {Math.round(LIVE_REFRESH_MS / 1000)}s
         </>
       }
-      statusControl={data ? <RestaurantServiceState service={data.service} /> : null}
+      heroAside={data ? <RestaurantServiceState service={data.service} /> : null}
       primaryAction={{ label: 'Open table', to: '/floor' }}
       onRefresh={board.refresh}
       refreshing={board.refreshing}
       metrics={cards}
-      metricsSkeleton={board.loading ? 5 : 0}
+      metricsLoading={board.loading}
     >
       <DashboardBody
         loading={board.loading}

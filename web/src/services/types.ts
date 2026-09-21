@@ -208,28 +208,107 @@ export interface MenuResponse {
   items: MenuItem[]
 }
 
+/**
+ * What the floor plan says about a table.
+ *
+ * `status` is the server's single answer to "what does this table look like",
+ * resolved from three facts that cannot be worked out from each other: the
+ * party sitting there, the service state of the furniture, and the next
+ * booking. Resolving it in one place is what stops two screens disagreeing.
+ */
+export type TableStatus = 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'OUT_OF_SERVICE'
+
+export type TableServiceState = 'READY' | 'CLEANING' | 'OUT_OF_SERVICE'
+
+export type TableShape = 'square' | 'rectangle' | 'round'
+
+export type FloorKind = 'indoor' | 'outdoor' | 'rooftop' | 'private_dining' | 'banquet' | 'other'
+
+export interface TableReservation {
+  reservation_id: number
+  reservation_no: string
+  guest_name: string | null
+  guest_mobile: string | null
+  customer_account_id: number | null
+  party_size: number
+  reserved_for: string
+  hold_minutes: number
+  notes: string | null
+  /** Near enough that the table is being held for it now. */
+  is_due: boolean
+}
+
+/** A booking on its own, as the diary lists it. */
+export interface Reservation extends Omit<TableReservation, 'is_due'> {
+  table_id: number
+  table_code: string | null
+  table_name: string | null
+  floor_id: number | null
+  floor_name: string | null
+  status: 'BOOKED' | 'SEATED' | 'CANCELLED' | 'NO_SHOW'
+  seated_session_id: number | null
+  seated_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  created_at: string
+}
+
 export interface FloorPlanTable {
   table_id: number
   table_code: string
   table_name: string | null
   seats: number
+  min_covers: number | null
+  max_covers: number | null
+  zone_name: string | null
+  shape: TableShape
+  /** Hundredths of a percent of the plan, 0–10000 on both axes. */
   layout_x: number | null
   layout_y: number | null
+  layout_w: number | null
+  layout_h: number | null
   table_session_id: number | null
-  status: 'FREE' | 'OCCUPIED' | 'CLOSED' | 'MERGED'
+  status: TableStatus
+  service_state: TableServiceState
+  service_note: string | null
+  service_state_by: string | null
+  service_state_at: string | null
   covers: number | null
   waiter_uuid: string | null
+  /** The waiter's name as recorded when the table was seated. */
+  waiter_name: string | null
   opened_at: string | null
   cart_id: number | null
   running_total: number | null
+  /** More than one when the party has asked to pay separately. */
+  bill_count: number
+  line_count: number
   open_kots: number
+  reservation: TableReservation | null
 }
 
 export interface FloorPlanFloor {
   floor_id: number
   floor_code: string
   floor_name: string
+  description: string | null
+  floor_kind: FloorKind
+  is_open: boolean
+  location_id: number | null
+  sort_order: number
   tables: FloorPlanTable[]
+}
+
+/** A floor's configuration row, without the live table status. */
+export interface FloorProfile {
+  floor_id: number
+  location_id: number
+  floor_code: string
+  floor_name: string
+  description: string | null
+  floor_kind: FloorKind
+  is_open: boolean
+  sort_order: number
 }
 
 export interface KotLine {
@@ -244,21 +323,91 @@ export interface KotLine {
   status: string
 }
 
+export type KotStatus = 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED'
+
+/**
+ * A kitchen ticket as the KDS endpoint returns it.
+ *
+ * Everything after `lines` is context the kitchen screen needs and the ticket
+ * itself does not own: the order kind and the customer belong to the cart, the
+ * table to the table session, the late threshold to the station. The API joins
+ * them so one screen is one round trip. They are optional because an older API
+ * build answers without them and the screen must still render.
+ */
 export interface Kot {
   kot_id: number
   kot_no: string
   kot_kind: 'new' | 'addon' | 'amend' | 'void'
   station_id: number | null
   station_name: string | null
+  station_code?: string | null
+  station_kind?: string | null
+  location_id?: number | null
+  location_name?: string | null
+  location_code?: string | null
   table_code: string | null
+  table_name?: string | null
+  covers?: number | null
   token_no: string | null
-  status: 'NEW' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED'
+  customer_name?: string | null
+  order_kind?: string | null
+  status: KotStatus
   priority: string
   fired_at: string
+  accepted_at?: string | null
+  ready_at?: string | null
+  served_at?: string | null
   notes: string | null
+  offline_created?: boolean
+  /** Fired → now, or fired → ready once the kitchen is done with it. */
   waiting_minutes?: number
   is_late?: boolean
+  /** Seconds since firing. Keeps running after READY; `prep_seconds` does not. */
+  elapsed_seconds?: number
+  /** Fired → ready, frozen the moment the ticket is ready. The kitchen's own time. */
+  prep_seconds?: number
+  /** This ticket's station threshold, in seconds. Not a global one. */
+  target_seconds?: number
+  late_after_minutes?: number
+  overdue_by_seconds?: number
+  line_count?: number
+  next_status?: KotStatus | null
   lines: KotLine[]
+}
+
+/** What one station is carrying right now. */
+export interface KdsStation {
+  station_id: number
+  station_code: string
+  station_name: string
+  station_kind: string
+  location_id: number
+  late_after_minutes: number
+  live: number
+  late: number
+}
+
+/**
+ * Today's kitchen performance, counted by the server over this POS's tickets.
+ *
+ * Null is a real answer: nothing finished yet is not the same as finished
+ * instantly, and an average over no tickets is not zero.
+ */
+export interface KdsMetrics {
+  completed: number
+  avg_prep_seconds: number | null
+  median_prep_seconds: number | null
+  on_time: number
+  on_time_pc: number | null
+  trading_day_start: string
+  timezone: string
+}
+
+export interface KdsDisplay {
+  kots: Kot[]
+  served?: Kot[]
+  stations?: KdsStation[]
+  metrics?: KdsMetrics | null
 }
 
 export interface PosReturn {

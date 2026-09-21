@@ -32,6 +32,11 @@ report: it re-asks every 45 seconds, and the figures that ignore the date filter
 (tables, tickets, open orders) are labelled apart from the ones it windows
 (takings, serve time, tickets served).
 
+Alongside them, **Shift report** (`/reports`) is the handover screen: one
+cashier's shift at one till, from what it sold to whether the drawer balances,
+with the close-out itself behind a three-step count. See
+[docs/SHIFT_REPORT.md](docs/SHIFT_REPORT.md).
+
 The boards are careful about what they claim. There is no provider-confirmed
 tender total, no device connection status, no loyalty balance, no guest rating,
 no reservations and no AI model, because POS has none of those to report; each
@@ -52,10 +57,12 @@ See [docs/auth/AICOUNTLY_AUTH_WORKFLOW.md](docs/auth/AICOUNTLY_AUTH_WORKFLOW.md)
 ```
 web/          React app (Vite). Builds to web/dist, deployed to the document root.
   src/dashboards/   the .pos-* design system, shared shell, charts and filters
+  src/shift/        the Shift report: its panels, charts, hooks and stylesheet
   src/pages/        the operational screens, and dashboards/ for the five boards
 server-php/   PHP API. Deployed to the api/ folder inside the document root.
   src/Domain/Dashboards/   one board service per dashboard, plus the shared
                            filter window and the tender-state rules
+  src/Domain/Shift/        the Shift report aggregate and the shop's drawer policy
 docs/         architecture, dashboards, deployment and auth notes
 ```
 

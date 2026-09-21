@@ -34,9 +34,9 @@ import {
   X,
 } from 'lucide-react'
 import { usePos } from '../../context/PosContext'
-import { DonutChart } from '../charts'
+import { StateDonut } from '../charts'
 import { clock, count, duration, money, titleCase } from '../format'
-import { Panel, PanelSkeleton, StatusBadge, Unavailable, type BadgeTone } from '../shell'
+import { CardSkeleton, Panel, StatusBadge, Unavailable, type BadgeTone } from '../shell'
 import {
   TABLE_STATE_COLOUR,
   TABLE_STATE_LABEL,
@@ -229,7 +229,7 @@ export function TableStatusPanel({ metrics }: { metrics: RestaurantOperationalMe
         </Unavailable>
       ) : (
         <div className="pos-tablestatus">
-          <DonutChart
+          <StateDonut
             slices={TABLE_STATE_ORDER.map((state) => ({
               key: state,
               label: TABLE_STATE_LABEL[state],
@@ -473,11 +473,14 @@ const SIGNAL_TONE: Record<RestaurantSignal['severity'], BadgeTone> = {
 /**
  * Aicountly's suggestion for the floor.
  *
- * THE BADGE IS THE HONEST PART. POS has no model integration, so every line
- * this renders is a threshold crossed by a figure the server counted, and it
- * says "Rule-based alert" rather than borrowing credit from a model that is not
- * there. When an intelligence endpoint lands it answers the same shape and its
- * items badge themselves "AI suggestion" — see restaurantInsight.ts.
+ * "AICOUNTLY AI SUGGESTS" IS THE NAME OF THE SURFACE, NOT A CLAIM ABOUT THE
+ * CONTENT — the same arrangement Business Overview's briefing strip already
+ * uses, and deliberately identical to it so the two cannot be read as saying
+ * different things. POS has no model integration, so the strip carries a BETA
+ * badge, the line inside it is badged "Rule-based alert" from the signal's own
+ * `kind`, and the rule engine behind it is restaurantInsight.ts. The day a
+ * model publishes here its items arrive with `kind: 'ai'` and badge themselves
+ * differently, which is why the badge is on the item and not on the panel.
  */
 export function AicountlyInsightStrip({
   signal,
@@ -498,6 +501,7 @@ export function AicountlyInsightStrip({
       <div className="pos-suggest__body">
         <div className="pos-inline pos-suggest__meta">
           <strong>Aicountly AI Suggests</strong>
+          <span className="pos-strip__beta">BETA</span>
           <StatusBadge tone={SIGNAL_TONE[signal.severity]}>
             {signal.kind === 'ai' ? 'AI suggestion' : 'Rule-based alert'}
           </StatusBadge>
@@ -869,27 +873,19 @@ export function RestaurantBoardSkeleton() {
   return (
     <>
       <div className="pos-grid-ops">
-        <div className="pos-panel pos-panel--skeleton">
-          <div className="pos-panel__body">
-            <PanelSkeleton rows={2} height={58} />
-          </div>
+        <div className="pos-panel pos-panel--placeholder">
+          <CardSkeleton lines={3} />
         </div>
-        <div className="pos-panel pos-panel--skeleton">
-          <div className="pos-panel__body">
-            <PanelSkeleton rows={2} height={58} />
-          </div>
+        <div className="pos-panel pos-panel--placeholder">
+          <CardSkeleton lines={3} />
         </div>
-        <div className="pos-panel pos-panel--skeleton">
-          <div className="pos-panel__body">
-            <PanelSkeleton rows={4} height={28} />
-          </div>
+        <div className="pos-panel pos-panel--placeholder">
+          <CardSkeleton lines={5} />
         </div>
       </div>
 
-      <div className="pos-panel pos-panel--skeleton">
-        <div className="pos-panel__body">
-          <PanelSkeleton rows={2} height={44} />
-        </div>
+      <div className="pos-panel pos-panel--placeholder">
+        <CardSkeleton lines={2} />
       </div>
     </>
   )
