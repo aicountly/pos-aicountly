@@ -48,6 +48,9 @@ final class SettingsController extends Controller
                 'uuid'         => $auth->uuid,
                 'display_name' => $auth->displayName(),
                 'kind'         => $auth->kind,
+                // What the header shows under the name. A label, never a check:
+                // every permission decision reads the list below it.
+                'roles'        => Permissions::roleNames($ctx, $auth),
             ],
             'company' => ['cmp_id' => $ctx->cmpId, 'fy_id' => $ctx->fyId, 'bo_id' => $ctx->boId],
             'permissions' => Permissions::granted($ctx, $auth),

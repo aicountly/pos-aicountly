@@ -39,7 +39,14 @@ export interface InsightItem {
 
 export interface InsightBlock {
   items: InsightItem[]
-  ai: { available: false; reason: string; note: string }
+  /**
+   * Whether a model wrote these.
+   *
+   * `false` today, everywhere, and the screens read this field rather than
+   * assuming — the badge over an insight flips to "AI" on the day a model
+   * integration lands and on no day before it.
+   */
+  ai: { available: boolean; reason: string; note: string }
   generated_at: string
   sufficient_data?: boolean
   /** What the strip counted over, for its "based on…" line. */
@@ -173,6 +180,70 @@ export interface OverviewBoard {
 // Retail Operations
 // ---------------------------------------------------------------------------
 
+export type CounterState = 'busy' | 'open' | 'idle' | 'closing' | 'closed'
+
+export interface RetailCounter {
+  terminal_id: number
+  terminal_code: string
+  display_name: string
+  terminal_kind: string
+  location_id: number
+  location_name: string
+  pos_mode: string
+  shift: {
+    session_id: number
+    status: string
+    opened_by: string
+    opened_at: string
+    expected_cash: number
+    opening_float: number
+  } | null
+  state: CounterState
+  bills: number
+  net: number
+  open_carts: number
+  voids: number
+  active_devices: number
+  receipt_printer: string | null
+  /** Null under fifteen minutes of trading — a rate off four minutes is invented. */
+  bills_per_hour: number | null
+  last_bill: string | null
+  last_activity: string | null
+}
+
+export interface RetailTrendPoint {
+  bucket: string
+  label: string
+  bills: number
+  sales: number
+  items: number
+  voids: number
+  average_bill: number
+  checkout_seconds: number | null
+  comparison_sales: number | null
+}
+
+/** The metric the trend chart is plotting. The server says which are real. */
+export type RetailTrendMetric = 'sales' | 'bills' | 'average_bill' | 'items'
+
+export interface RetailAlert {
+  id: string
+  kind: 'rule'
+  severity: 'critical' | 'warning' | 'info'
+  title: string
+  context: string
+  at: string | null
+  href: string | null
+}
+
+export interface RetailReadinessCheck {
+  key: string
+  label: string
+  ready: number
+  of: number
+  note: string
+}
+
 export interface RetailBoard {
   window: WindowMeta
   kpis: {
@@ -186,28 +257,88 @@ export interface RetailBoard {
       | { available: false; reason: string; note: string }
       | { available: true; median_seconds: number; sampled: number; basis: string }
     exceptions: number
+    /** The windowed part of `exceptions`, for a like-for-like comparison. */
+    exceptions_windowed: number
   }
-  counters: Array<{
-    terminal_id: number
-    terminal_code: string
-    display_name: string
-    terminal_kind: string
-    location_id: number
-    location_name: string
-    pos_mode: string
-    shift: {
-      session_id: number
-      status: string
-      opened_by: string
-      opened_at: string
-      expected_cash: number
-    } | null
-    state: 'busy' | 'open' | 'closed'
+  /** Null when no comparison was asked for. Only the windowed figures are here. */
+  comparison: {
+    label: string | null
     bills: number
     net: number
-    open_carts: number
-    last_activity: string | null
-  }>
+    voids: number
+    approvals: number
+    exceptions_windowed: number
+    checkout: { available: false } | { available: true; median_seconds: number; sampled: number }
+  } | null
+  trend: {
+    bucket: 'hour' | 'day'
+    points: RetailTrendPoint[]
+    comparison_label: string | null
+    metrics: Array<{ key: RetailTrendMetric; label: string; kind: 'money' | 'count' | 'decimal' }>
+    basis: string
+  }
+  checkout_health: {
+    /** Always unavailable: nothing in this product observes a queue. */
+    wait: { available: false; reason: string; note: string }
+    checkout: { available: boolean; median_seconds: number | null; p90_seconds: number | null; sampled: number }
+    completion: {
+      available: boolean
+      rate_pc: number | null
+      started: number
+      completed: number
+      voided: number
+      unfinished: number
+    }
+    abandonment: { available: boolean; rate_pc: number | null; voided: number }
+    on_counter: { carts: number; value: number; oldest_seconds: number | null }
+    status: 'healthy' | 'moderate' | 'high' | 'critical' | 'unknown'
+    summary: string
+    basis: string
+  }
+  categories:
+    | {
+        available: false
+        reason: string
+        note: string
+        rows: []
+        total: number
+        covered: number
+        uncategorised: number
+        coverage_pc: number | null
+        source: null
+      }
+    | {
+        available: true
+        rows: Array<{ label: string; amount: number; qty: number; bills: number; share_pc: number | null }>
+        total: number
+        covered: number
+        uncategorised: number
+        coverage_pc: number | null
+        source: string
+      }
+  alerts: { items: RetailAlert[]; total: number; kind: 'rule'; note: string }
+  readiness:
+    | { available: false; reason: string; note: string; ready: number; total: number; percent: null; checks: [] }
+    | {
+        available: true
+        ready: number
+        total: number
+        percent: number | null
+        checks: RetailReadinessCheck[]
+        note: string
+      }
+  pulse: InsightBlock & {
+    peak: {
+      hour: number
+      label: string
+      bills: number
+      net: number
+      days_sampled: number
+      minutes_until: number | null
+      basis: string
+    } | null
+  }
+  counters: RetailCounter[]
   held_bills: Array<{
     cart_id: number
     cart_uuid: string
