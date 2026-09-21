@@ -250,10 +250,12 @@ web/src/
   services/api.ts          typed fetch; one 401 retry with a fresh key
   context/PosContext.tsx   company scope, permissions, which till this is
   dashboards/              the .pos-* design system, shared shell and charts
+  home/                    the home screen at `/` — model.ts is the view model
+                           and the file worth reading first
   kitchen/                 the kitchen display: service.ts (the only door to
                            the API), derive.ts (pure ageing, SLA, grouping),
                            the hooks, and components/
-  pages/                   Till, Floor, Kitchen, Returns, OfflineQueue,
+  pages/                   Home, Till, Floor, Kitchen, Returns, OfflineQueue,
                            Reports, Setup
 ```
 

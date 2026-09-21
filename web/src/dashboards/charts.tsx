@@ -46,6 +46,7 @@ export function TrendChart({
   comparisonLabel,
   format,
   height = 200,
+  width = 640,
   tableVisible = false,
   caption,
 }: {
@@ -54,6 +55,13 @@ export function TrendChart({
   comparisonLabel?: string | null
   format: (value: number) => string
   height?: number
+  /**
+   * The viewBox width. The SVG is drawn with preserveAspectRatio="none" so it
+   * fills its panel, which stretches the axis text by whatever the panel and
+   * the viewBox differ by. 640 suits a full-width dashboard panel; a narrow
+   * card passes something nearer its own width so the labels are not squeezed.
+   */
+  width?: number
   tableVisible?: boolean
   caption: string
 }) {
@@ -63,7 +71,6 @@ export function TrendChart({
     return <p className="pos-muted">Nothing to plot for this period.</p>
   }
 
-  const width = 640
   const pad = { top: 12, right: 12, bottom: 26, left: 52 }
   const innerW = width - pad.left - pad.right
   const innerH = height - pad.top - pad.bottom
@@ -102,7 +109,15 @@ export function TrendChart({
         <path className="pos-chart__line" d={path(line)} />
 
         {points.length <= 32 &&
-          line.map((p, i) => <circle key={i} className="pos-chart__point" cx={p.x} cy={p.y} r={2.5} />)}
+          line.map((p, i) => (
+            <circle key={i} className="pos-chart__point" cx={p.x} cy={p.y} r={2.5}>
+              {/* The browser's own tooltip. The table underneath is still the
+                  data; this saves a reader crossing to it for one point. */}
+              <title>
+                {points[i].label}: {format(points[i].value)}
+              </title>
+            </circle>
+          ))}
 
         {ticks.map((i) => (
           <text key={i} className="pos-chart__axis" x={x(i)} y={height - 8} textAnchor="middle">
