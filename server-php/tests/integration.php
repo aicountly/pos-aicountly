@@ -253,7 +253,7 @@ function resetDatabase(): void
         'pos_kds_events', 'pos_kot_lines', 'pos_kots',
         'pos_cart_payments', 'pos_cart_lines', 'pos_carts',
         'pos_approval_events', 'pos_cash_drawer_events', 'pos_register_sessions',
-        'pos_table_sessions', 'pos_tables', 'pos_floors',
+        'pos_table_reservations', 'pos_table_sessions', 'pos_tables', 'pos_floors',
         'pos_combo_components', 'pos_menu_item_modifiers', 'pos_modifier_options',
         'pos_modifier_groups', 'pos_menu_items', 'pos_menu_categories',
         'pos_kds_stations', 'pos_external_orders', 'pos_connectors',
@@ -1035,6 +1035,259 @@ check('a sold-out item cannot be added to a bill', function () use ($ctx, $auth)
         'the kitchen said no',
     );
 });
+
+
+// ---------------------------------------------------------------------------
+// The floor plan: three reasons a table is not simply free
+// ---------------------------------------------------------------------------
+
+/** A restaurant outlet with one floor and one table on it. @return array{0:int,1:int,2:int} */
+function seedFloor(Context $ctx, string $code = 'T5', int $seats = 4): array
+{
+    [$locationId, $terminalId] = seedOutlet($ctx, 'restaurant');
+    $floorId = (int) Db::insert('pos_floors', [
+        'cmp_id' => $ctx->cmpId, 'location_id' => $locationId, 'floor_code' => 'GF', 'floor_name' => 'Ground',
+    ], 'floor_id');
+    $tableId = (int) Db::insert('pos_tables', [
+        'cmp_id' => $ctx->cmpId, 'floor_id' => $floorId, 'table_code' => $code, 'seats' => $seats,
+    ], 'table_id');
+
+    return [$terminalId, $floorId, $tableId];
+}
+
+/** The one table on the one floor, as the floor plan reports it. */
+function planTable(TableService $tables, int $tableId): array
+{
+    foreach ($tables->floorPlan() as $floor) {
+        foreach ($floor['tables'] as $table) {
+            if ($table['table_id'] === $tableId) {
+                return $table;
+            }
+        }
+    }
+
+    return [];
+}
+
+check('a table being cleaned reads as cleaning, not as free', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    assertSame('FREE', planTable($tables, $tableId)['status'], 'before');
+
+    $tables->setServiceState($tableId, ['service_state' => 'CLEANING', 'note' => 'Spill']);
+    assertSame('CLEANING', planTable($tables, $tableId)['status'], 'after');
+
+    $tables->setServiceState($tableId, ['service_state' => 'READY']);
+    assertSame('FREE', planTable($tables, $tableId)['status'], 'once it is wiped down');
+});
+
+check('a table with a party at it cannot be taken out of service', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$terminalId, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    $tables->open($tableId, ['terminal_id' => $terminalId]);
+
+    assertThrows(
+        fn () => $tables->setServiceState($tableId, ['service_state' => 'OUT_OF_SERVICE']),
+        'party at that table',
+        'the furniture is not how a table gets cleared',
+    );
+});
+
+check('a booking due shortly holds its table; one due tomorrow does not', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+
+    $tables->createReservation([
+        'table_id' => $tableId, 'guest_name' => 'Meera', 'party_size' => 2,
+        'reserved_for' => (new \DateTimeImmutable('+10 days'))->format(DATE_ATOM),
+    ]);
+    assertSame('FREE', planTable($tables, $tableId)['status'], 'a booking next week does not close the table tonight');
+
+    $tables->createReservation([
+        'table_id' => $tableId, 'guest_name' => 'Arun', 'party_size' => 4,
+        'reserved_for' => (new \DateTimeImmutable('+30 minutes'))->format(DATE_ATOM),
+    ]);
+
+    $table = planTable($tables, $tableId);
+    assertSame('RESERVED', $table['status'], 'a booking half an hour out does');
+    assertSame('Arun', $table['reservation']['guest_name'], 'and it is the nearer booking that is shown');
+});
+
+check('two bookings cannot be taken for the same table at the same time', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    $when = (new \DateTimeImmutable('+2 hours'))->format(DATE_ATOM);
+    $tables->createReservation(['table_id' => $tableId, 'guest_name' => 'Meera', 'reserved_for' => $when]);
+
+    assertThrows(
+        fn () => $tables->createReservation(['table_id' => $tableId, 'guest_name' => 'Arun', 'reserved_for' => $when]),
+        'already booked',
+        'one table, one party',
+    );
+});
+
+check('seating a booking opens the bill and closes the booking', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$terminalId, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    $booking = $tables->createReservation([
+        'table_id' => $tableId, 'guest_name' => 'Meera', 'guest_mobile' => '9800000000',
+        'party_size' => 3, 'reserved_for' => (new \DateTimeImmutable('+20 minutes'))->format(DATE_ATOM),
+    ]);
+
+    $session = $tables->seatReservation((int) $booking['reservation_id'], ['terminal_id' => $terminalId]);
+
+    assertSame('OCCUPIED', $session['status'], 'the party is seated');
+    assertSame(3, $session['covers'], 'covers come from the booking');
+    assertSame(1, count($session['carts']), 'and a bill opened with them');
+
+    $after = $tables->reservation((int) $booking['reservation_id']);
+    assertSame('SEATED', $after['status'], 'the booking is closed out');
+    assertSame((int) $session['table_session_id'], $after['seated_session_id'], 'and points at the party it became');
+});
+
+check('a booking cannot be seated twice', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$terminalId, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    $booking = $tables->createReservation([
+        'table_id' => $tableId, 'reserved_for' => (new \DateTimeImmutable('+20 minutes'))->format(DATE_ATOM),
+    ]);
+    $tables->seatReservation((int) $booking['reservation_id'], ['terminal_id' => $terminalId]);
+
+    assertThrows(
+        fn () => $tables->seatReservation((int) $booking['reservation_id'], ['terminal_id' => $terminalId]),
+        'already been seated',
+        'the second press does nothing',
+    );
+});
+
+check('the floor plan counts a split table once, with both bills added up', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$terminalId, , $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    $session = $tables->open($tableId, ['terminal_id' => $terminalId, 'covers' => 4]);
+    $cartId = (int) $session['carts'][0]['cart_id'];
+
+    $carts = new CartService($ctx, $auth);
+    $carts->addLine($cartId, ['item_id' => 101, 'quantity' => 1, 'rate' => 300, 'estimated_tax_pc' => 0]);
+    $carts->addLine($cartId, ['item_id' => 102, 'quantity' => 1, 'rate' => 200, 'estimated_tax_pc' => 0]);
+
+    $moving = [];
+    foreach ($carts->find($cartId)['lines'] as $line) {
+        if ((int) $line['item_id'] === 102) {
+            $moving[] = (int) $line['line_id'];
+        }
+    }
+
+    $tables->split((int) $session['table_session_id'], ['line_ids' => $moving]);
+
+    $rows = 0;
+    foreach ($tables->floorPlan() as $floor) {
+        foreach ($floor['tables'] as $table) {
+            if ($table['table_id'] === $tableId) {
+                $rows++;
+                assertSame(2, $table['bill_count'], 'two bills');
+                assertSame(2, $table['line_count'], 'across which there are two lines');
+                assertSame(500.0, round((float) $table['running_total'], 2), 'and the table owes the sum of them');
+            }
+        }
+    }
+    assertSame(1, $rows, 'the table appears on the plan exactly once');
+});
+
+check('a saved layout keeps its coordinates and refuses two tables with one name', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $floorId, $tableId] = seedFloor($ctx, 'T1');
+    $secondId = (int) Db::insert('pos_tables', [
+        'cmp_id' => $ctx->cmpId, 'floor_id' => $floorId, 'table_code' => 'T2', 'seats' => 2,
+    ], 'table_id');
+
+    $tables = new TableService($ctx, $auth);
+    $tables->saveLayout($floorId, ['tables' => [
+        ['table_id' => $tableId, 'table_code' => 'T1', 'seats' => 4, 'zone_name' => 'Window', 'shape' => 'round', 'layout_x' => 1200, 'layout_y' => 3400],
+        ['table_id' => $secondId, 'table_code' => 'T2', 'seats' => 2, 'layout_x' => 9999, 'layout_y' => 200],
+    ]]);
+
+    $saved = planTable($tables, $tableId);
+    assertSame(1200, $saved['layout_x'], 'x');
+    assertSame(3400, $saved['layout_y'], 'y');
+    assertSame('round', $saved['shape'], 'shape');
+    assertSame('Window', $saved['zone_name'], 'zone');
+
+    assertThrows(
+        fn () => $tables->saveLayout($floorId, ['tables' => [
+            ['table_id' => $tableId, 'table_code' => 'T2'],
+            ['table_id' => $secondId, 'table_code' => 'T2'],
+        ]]),
+        'both called T2',
+        'two tables with one name is how a waiter serves the wrong party',
+    );
+
+    // Nothing was written: the clash was found before the first row moved.
+    assertSame('T1', planTable($tables, $tableId)['table_code'], 'the refused save changed nothing');
+});
+
+check('two tables can swap names in one save', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $floorId, $tableId] = seedFloor($ctx, 'T1');
+    $secondId = (int) Db::insert('pos_tables', [
+        'cmp_id' => $ctx->cmpId, 'floor_id' => $floorId, 'table_code' => 'T2', 'seats' => 2,
+    ], 'table_id');
+
+    // The unique index is checked row by row, so a one-pass rename would fail
+    // on the first table even though the finished layout is valid.
+    $tables = new TableService($ctx, $auth);
+    $tables->saveLayout($floorId, ['tables' => [
+        ['table_id' => $tableId, 'table_code' => 'T2'],
+        ['table_id' => $secondId, 'table_code' => 'T1'],
+    ]]);
+
+    assertSame('T2', planTable($tables, $tableId)['table_code'], 'the first took the second\'s name');
+    assertSame('T1', planTable($tables, $secondId)['table_code'], 'and the second the first\'s');
+});
+
+check('a floor with a party on it will not be retired', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$terminalId, $floorId, $tableId] = seedFloor($ctx);
+
+    $tables = new TableService($ctx, $auth);
+    $tables->open($tableId, ['terminal_id' => $terminalId]);
+
+    assertThrows(fn () => $tables->deleteFloor($floorId), 'still a party', 'the room is in use');
+});
+
+check('a floor created with a quick setup comes back with its tables laid out', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$locationId] = seedOutlet($ctx, 'restaurant');
+
+    $tables = new TableService($ctx, $auth);
+    $floor = $tables->createFloor([
+        'location_id' => $locationId, 'floor_name' => 'Ground Floor',
+        'description' => 'Main dining', 'floor_kind' => 'indoor',
+        'table_count' => 8, 'seats' => 4, 'zone_name' => 'Main Dining',
+    ]);
+
+    assertSame('GF', $floor['floor_code'], 'a code derived from the name');
+
+    $plan = $tables->floorPlan($locationId);
+    assertSame(1, count($plan), 'one floor');
+    assertSame(8, count($plan[0]['tables']), 'eight tables');
+    assertSame('Main Dining', $plan[0]['tables'][0]['zone_name'], 'all in the named zone');
+    assertTrue($plan[0]['tables'][0]['layout_x'] !== null, 'and each already has a place on the plan');
+});
+
 
 echo "\nReturns\n";
 
@@ -2342,6 +2595,10 @@ check('the only remote references stored are ids, uuids and numbers', function (
         'pos_returns.inventory_document_uuid', 'pos_returns.customer_account_id',
         'pos_location_profiles.default_cash_account_id', 'pos_location_profiles.walk_in_account_id',
         'pos_location_profiles.default_warehouse_id',
+        // A booking points at the guest's Books account when they have one. The
+        // name and mobile beside it are what was typed on the phone, not a copy
+        // of the account — the same arrangement a walk-in cart already uses.
+        'pos_table_reservations.customer_account_id',
         'pos_menu_items.item_id', 'pos_menu_items.bom_id', 'pos_menu_items.tax_cat_id',
         'pos_modifier_options.item_id',
         'pos_cart_lines.item_id', 'pos_cart_lines.unit_id', 'pos_cart_lines.warehouse_id',

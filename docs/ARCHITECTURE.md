@@ -240,7 +240,7 @@ server-php/
   database/migrations/     001 terminals · 002 restaurant · 003 integration
                            · 004 dashboards (trading day, targets, read indexes)
   tests/
-    integration.php        89 tests, incl. the release-blocking ownership suite
+    integration.php        100 tests, incl. the release-blocking ownership suite
     run.sh                 real PostgreSQL + a stub for Books and Inventory
     stub/router.php        the stub
 

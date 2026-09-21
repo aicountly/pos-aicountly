@@ -25,7 +25,7 @@ use Aicountly\Api\Db;
 final class NumberSeries
 {
     /**
-     * Next number for a document kind: return | kot.
+     * Next number for a document kind: return | kot | reservation.
      *
      * Allocated inside the caller's transaction with the row locked, so two
      * tills pressing the same button in the same second get consecutive
@@ -37,10 +37,14 @@ final class NumberSeries
         [$table, $column, $prefixColumn, $default, $scoped] = match ($kind) {
             'return' => ['pos_returns', 'return_no', 'return_prefix', 'POSRET', true],
             'kot'    => ['pos_kots', 'kot_no', 'kot_prefix', 'KOT', true],
+            // A booking is POS' own and nobody has asked to rename it, so it has
+            // no settings column to read. A null prefix column means the default
+            // stands rather than that the lookup is skipped by accident.
+            'reservation' => ['pos_table_reservations', 'reservation_no', null, 'RSV', true],
             default  => throw new \InvalidArgumentException('Unknown document kind ' . $kind),
         };
 
-        $prefix = (string) (Db::scalar(
+        $prefix = $prefixColumn === null ? $default : (string) (Db::scalar(
             'SELECT ' . Db::quoteIdentifier($prefixColumn) . ' FROM pos_settings WHERE cmp_id = :cmp',
             ['cmp' => $ctx->cmpId],
         ) ?? $default);

@@ -89,11 +89,20 @@ final class Routes
         // Restaurant: floors, tables, tickets.
         $router->get('v1/floor-plan', [RestaurantController::class, 'floorPlan']);
         $router->post('v1/tables/{id}/open', [RestaurantController::class, 'openTable']);
+        // Why a table nobody is sitting at still cannot be seated.
+        $router->post('v1/tables/{id}/service-state', [RestaurantController::class, 'tableServiceState']);
         $router->get('v1/table-sessions/{id}', [RestaurantController::class, 'tableSession']);
         $router->post('v1/table-sessions/{id}/transfer', [RestaurantController::class, 'transferTable']);
         $router->post('v1/table-sessions/{id}/merge', [RestaurantController::class, 'mergeTable']);
         $router->post('v1/table-sessions/{id}/split', [RestaurantController::class, 'splitTable']);
         $router->post('v1/table-sessions/{id}/close', [RestaurantController::class, 'closeTable']);
+
+        // Bookings. POS' own: a table held for a party that has not arrived is
+        // an operational fact and reaches no other product.
+        $router->get('v1/reservations', [RestaurantController::class, 'reservations']);
+        $router->post('v1/reservations', [RestaurantController::class, 'createReservation']);
+        $router->post('v1/reservations/{id}/cancel', [RestaurantController::class, 'cancelReservation']);
+        $router->post('v1/reservations/{id}/seat', [RestaurantController::class, 'seatReservation']);
 
         $router->post('v1/carts/{id}/kot', [RestaurantController::class, 'fireKot']);
         $router->get('v1/kots/{id}', [RestaurantController::class, 'kot']);
@@ -135,7 +144,13 @@ final class Routes
         $router->post('v1/devices/{id}/revoke', [AdminController::class, 'revokeDevice']);
         $router->get('v1/floors', [AdminController::class, 'floors']);
         $router->post('v1/floors', [AdminController::class, 'createFloor']);
+        $router->put('v1/floors/{id}', [AdminController::class, 'updateFloor']);
+        $router->delete('v1/floors/{id}', [AdminController::class, 'deleteFloor']);
+        // The floor plan editor saves the whole room at once, not per drag.
+        $router->put('v1/floors/{id}/layout', [AdminController::class, 'saveFloorLayout']);
         $router->post('v1/tables', [AdminController::class, 'createTable']);
+        $router->put('v1/tables/{id}', [AdminController::class, 'updateTable']);
+        $router->delete('v1/tables/{id}', [AdminController::class, 'deleteTable']);
         $router->get('v1/stations', [AdminController::class, 'stations']);
         $router->post('v1/stations', [AdminController::class, 'createStation']);
 
