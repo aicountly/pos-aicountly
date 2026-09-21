@@ -6,6 +6,7 @@ namespace Aicountly\Api\Controllers;
 
 use Aicountly\Api\Audit;
 use Aicountly\Api\Db;
+use Aicountly\Api\Domain\TableService;
 use Aicountly\Api\Http;
 use Aicountly\Api\Permissions;
 
@@ -39,7 +40,11 @@ final class AdminController extends Controller
 
         $body = Http::body();
         $values = array_filter([
-            'bo_id'                   => isset($body['bo_id']) ? (int) $body['bo_id'] : null,
+            // self::id(), like every other reference here, so that bo_id = 0 —
+            // the "all branches" sentinel the company scope carries into every
+            // body — reads as "not supplied" instead of moving the outlet to a
+            // branch numbered zero.
+            'bo_id'                   => self::id($body['bo_id'] ?? null),
             'location_code'           => self::text($body['location_code'] ?? null),
             'display_name'            => self::text($body['display_name'] ?? null),
             'pos_mode'                => self::mode($body['pos_mode'] ?? null),
@@ -55,6 +60,18 @@ final class AdminController extends Controller
             if (array_key_exists($flag, $body)) {
                 $values[$flag] = (bool) $body[$flag];
             }
+        }
+
+        if (($values['location_code'] ?? null) !== null) {
+            self::assertCodeFree(
+                'pos_location_profiles',
+                'location_code',
+                'location_id',
+                (string) $values['location_code'],
+                $ctx->cmpId,
+                $id === null ? null : (int) $id,
+                'Another outlet already uses that code.',
+            );
         }
 
         if ($id === null) {
@@ -126,6 +143,18 @@ final class AdminController extends Controller
         }
         if (array_key_exists('is_active', $body)) {
             $values['is_active'] = (bool) $body['is_active'];
+        }
+
+        if (($values['terminal_code'] ?? null) !== null) {
+            self::assertCodeFree(
+                'pos_terminals',
+                'terminal_code',
+                'terminal_id',
+                (string) $values['terminal_code'],
+                $ctx->cmpId,
+                $id === null ? null : (int) $id,
+                'Another till already uses that code.',
+            );
         }
 
         if ($id === null) {
@@ -239,7 +268,9 @@ final class AdminController extends Controller
     {
         [$auth, $ctx] = self::enter();
         Http::data(['floors' => Db::all(
-            'SELECT * FROM pos_floors WHERE cmp_id = :cmp ORDER BY sort_order, floor_name',
+            'SELECT floor_id, location_id, floor_code, floor_name, description, floor_kind,
+                    is_open, sort_order, is_active
+             FROM pos_floors WHERE cmp_id = :cmp AND is_active = TRUE ORDER BY sort_order, floor_name',
             ['cmp' => $ctx->cmpId],
         )]);
     }
@@ -247,42 +278,50 @@ final class AdminController extends Controller
     public static function createFloor(): void
     {
         [$auth, $ctx] = self::enter();
-        Permissions::assert($ctx, $auth, 'terminal.manage');
+        Http::data((new TableService($ctx, $auth))->createFloor(Http::body()), 201);
+    }
 
-        $body = Http::body();
-        $floorId = (int) Db::insert('pos_floors', [
-            'cmp_id'      => $ctx->cmpId,
-            'location_id' => self::id($body['location_id'] ?? null),
-            'floor_code'  => self::text($body['floor_code'] ?? null) ?? 'GF',
-            'floor_name'  => self::text($body['floor_name'] ?? null) ?? 'Ground floor',
-            'sort_order'  => (int) ($body['sort_order'] ?? 0),
-        ], 'floor_id');
+    public static function updateFloor(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->updateFloor((int) $id, Http::body()));
+    }
 
-        Http::data(Db::first('SELECT * FROM pos_floors WHERE floor_id = :id', ['id' => $floorId]) ?? [], 201);
+    public static function deleteFloor(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->deleteFloor((int) $id));
+    }
+
+    /**
+     * The whole floor's layout, saved once when the manager presses Save.
+     *
+     * A PUT rather than a POST because it replaces the arrangement rather than
+     * adding to it, and pressing Save twice has to mean the same thing as
+     * pressing it once.
+     */
+    public static function saveFloorLayout(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->saveLayout((int) $id, Http::body()));
     }
 
     public static function createTable(): void
     {
         [$auth, $ctx] = self::enter();
-        Permissions::assert($ctx, $auth, 'terminal.manage');
+        Http::data((new TableService($ctx, $auth))->createTable(Http::body()), 201);
+    }
 
-        $body = Http::body();
-        $floorId = self::id($body['floor_id'] ?? null);
-        if ($floorId === null) {
-            Http::validationFailed('Which floor is the table on?', ['field' => 'floor_id']);
-        }
+    public static function updateTable(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->updateTable((int) $id, Http::body()));
+    }
 
-        $tableId = (int) Db::insert('pos_tables', [
-            'cmp_id'     => $ctx->cmpId,
-            'floor_id'   => $floorId,
-            'table_code' => self::text($body['table_code'] ?? null) ?? 'T1',
-            'table_name' => self::text($body['table_name'] ?? null),
-            'seats'      => max(1, (int) ($body['seats'] ?? 2)),
-            'layout_x'   => isset($body['layout_x']) ? (int) $body['layout_x'] : null,
-            'layout_y'   => isset($body['layout_y']) ? (int) $body['layout_y'] : null,
-        ], 'table_id');
-
-        Http::data(Db::first('SELECT * FROM pos_tables WHERE table_id = :id', ['id' => $tableId]) ?? [], 201);
+    public static function deleteTable(string $id): void
+    {
+        [$auth, $ctx] = self::enter();
+        Http::data((new TableService($ctx, $auth))->deleteTable((int) $id));
     }
 
     public static function stations(): void
@@ -421,6 +460,39 @@ final class AdminController extends Controller
              WHERE a.cmp_id = :cmp ORDER BY p.profile_name, a.user_uuid',
             ['cmp' => $ctx->cmpId],
         )]);
+    }
+
+    /**
+     * Refuse a code another row in this company already holds.
+     *
+     * Both tables carry UNIQUE (cmp_id, <code>), so the database was already
+     * refusing this — but it refused with a PDOException, which the front
+     * controller reports as "The POS database is not reachable right now."
+     * That is true of a real outage and a lie about a typo, and it sends an
+     * administrator looking at the server when the answer is on their screen.
+     * The unique index stays: this is the readable message in front of it, not
+     * a replacement for it.
+     */
+    private static function assertCodeFree(
+        string $table,
+        string $codeColumn,
+        string $idColumn,
+        string $code,
+        int $cmpId,
+        ?int $ignoreId,
+        string $message,
+    ): void {
+        $sql = "SELECT {$idColumn} FROM {$table} WHERE cmp_id = :cmp AND {$codeColumn} = :code";
+        $params = ['cmp' => $cmpId, 'code' => $code];
+
+        if ($ignoreId !== null) {
+            $sql .= " AND {$idColumn} <> :self";
+            $params['self'] = $ignoreId;
+        }
+
+        if (Db::first($sql, $params) !== null) {
+            Http::conflict($message, ['field' => $codeColumn]);
+        }
     }
 
     private static function mode(mixed $raw): ?string

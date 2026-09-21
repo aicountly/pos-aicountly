@@ -1,15 +1,17 @@
 /**
  * The furniture the Controls command centre is built from.
  *
- * Small, unopinionated pieces: a card, a pill, the three states a widget can be
- * in, and a skeleton that mirrors the layout rather than a spinner that hides
- * it. Everything else on this board is a real widget with a real question to
- * answer.
+ * Small, unopinionated pieces: a card, a pill, an empty state and a skeleton
+ * that mirrors the layout rather than a spinner that hides it.
+ *
+ * What is NOT here: the failure states. `PanelError` and `PanelBoundary` live
+ * in the shared shell and are used as they are, so a widget on this board
+ * fails the same way a panel on any other board does.
  */
 
-import { Component, Fragment, type ErrorInfo, type ReactNode } from 'react'
-import { CircleAlert, Inbox, RefreshCw, TriangleAlert } from 'lucide-react'
-import { trackEvent } from '../../utils/analytics'
+import type { ReactNode } from 'react'
+import { Inbox } from 'lucide-react'
+import { PanelError } from '../shell'
 
 export type PillTone = 'success' | 'info' | 'warning' | 'danger' | 'purple' | 'neutral'
 
@@ -95,69 +97,6 @@ export function WidgetEmptyState({
   )
 }
 
-export function WidgetErrorState({ title, message, onRetry }: { title: string; message: string; onRetry?: () => void }) {
-  return (
-    <div className="cc-state cc-state--danger" role="alert">
-      <span className="cc-state__icon" aria-hidden>
-        <TriangleAlert size={18} />
-      </span>
-      <strong>{title}</strong>
-      <p>{message}</p>
-      {onRetry && (
-        <button type="button" className="pos-button pos-button--secondary pos-button--small" onClick={onRetry}>
-          <RefreshCw size={14} aria-hidden /> Try again
-        </button>
-      )}
-    </div>
-  )
-}
-
-/**
- * One widget failing must not take the board with it.
- *
- * A close-out screen is read under time pressure; a manager who loses the whole
- * page because one card met an unexpected shape has lost the shift register,
- * the alerts and the drawer total as well. This catches the render, keeps the
- * rest of the board on screen, and reports through the analytics channel the
- * app already has.
- *
- * Retry re-mounts the subtree by changing its key: clearing the error alone
- * would replay the same render against the same props and fail identically.
- */
-export class WidgetBoundary extends Component<
-  { title: string; children: ReactNode },
-  { error: Error | null; attempt: number }
-> {
-  state: { error: Error | null; attempt: number } = { error: null, attempt: 0 }
-
-  static getDerivedStateFromError(error: Error) {
-    return { error }
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(`Controls widget failed: ${this.props.title}`, error, info.componentStack)
-    trackEvent('pos_widget_error', { widget: this.props.title, message: error.message })
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="cc-card">
-          <WidgetErrorState
-            title={`Unable to load ${this.props.title.toLowerCase()}`}
-            message={this.state.error.message}
-            onRetry={() => this.setState((current) => ({ error: null, attempt: current.attempt + 1 }))}
-          />
-        </div>
-      )
-    }
-
-    // A Fragment, not a wrapper element: the card has to stay a direct child
-    // of the grid it is laid out by.
-    return <Fragment key={this.state.attempt}>{this.props.children}</Fragment>
-  }
-}
-
 export function Skeleton({ width, height = 12, radius }: { width?: number | string; height?: number; radius?: number }) {
   return (
     <span
@@ -224,16 +163,9 @@ export function ControlsSkeleton() {
 /** A board-wide failure, rendered as a card rather than a bare sentence. */
 export function BoardError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="cc-card" role="alert">
-      <div className="cc-state cc-state--danger" style={{ padding: '40px 20px' }}>
-        <span className="cc-state__icon" aria-hidden>
-          <CircleAlert size={18} />
-        </span>
-        <strong>This board could not be loaded</strong>
-        <p>{message}</p>
-        <button type="button" className="pos-button pos-button--primary pos-button--small" onClick={onRetry}>
-          <RefreshCw size={14} aria-hidden /> Try again
-        </button>
+    <div className="cc-card">
+      <div className="cc-card__body">
+        <PanelError title="This board could not be loaded" message={message} onRetry={onRetry} />
       </div>
     </div>
   )

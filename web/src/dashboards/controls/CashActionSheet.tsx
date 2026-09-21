@@ -1,6 +1,11 @@
 /**
  * The cash sheets: a drawer movement, and a drawer count.
  *
+ * Both ride the shared DashboardDrawer rather than a shell of their own, so a
+ * cash count behaves like every other side panel in POS: Escape closes it,
+ * focus moves in and comes back to whatever opened it, and the page behind it
+ * does not scroll away underneath.
+ *
  * BOTH POST TO ENDPOINTS THAT ALREADY EXIST.
  *
  *   Cash in / out / safe drop / petty withdrawal → POST v1/shifts/{id}/drawer
@@ -18,11 +23,11 @@
  * withdrawals in the ledger.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { X } from 'lucide-react'
 import { api } from '../../services/api'
 import { moneyExact } from '../format'
+import { DashboardDrawer } from '../shell'
 import type { ControlsBoard } from '../types'
 
 export type CashActionKind = 'reconcile' | 'cash_in' | 'cash_out' | 'safe_drop' | 'petty_withdrawal'
@@ -52,67 +57,6 @@ const MOVEMENT_COPY: Record<Exclude<CashActionKind, 'reconcile'>, { title: strin
   },
 }
 
-// ---------------------------------------------------------------------------
-// The sheet shell
-// ---------------------------------------------------------------------------
-
-function Sheet({
-  variant,
-  title,
-  blurb,
-  onClose,
-  footer,
-  children,
-}: {
-  variant: 'drawer' | 'modal'
-  title: string
-  blurb?: string
-  onClose: () => void
-  footer?: ReactNode
-  children: ReactNode
-}) {
-  const panel = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-
-    // Focus the first control rather than the panel, so the sheet is usable
-    // from the keyboard the moment it opens.
-    const first = panel.current?.querySelector<HTMLElement>('select, input, textarea, button')
-    first?.focus()
-
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  return (
-    <>
-      <button type="button" className="cc-scrim" aria-label="Close" onClick={onClose} />
-      <div
-        ref={panel}
-        className={`cc-sheet cc-sheet--${variant}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <header className="cc-sheet__header">
-          <div style={{ minWidth: 0 }}>
-            <h2>{title}</h2>
-            {blurb && <p>{blurb}</p>}
-          </div>
-          <button type="button" className="cc-icon-button" onClick={onClose} aria-label="Close">
-            <X size={16} aria-hidden />
-          </button>
-        </header>
-        <div className="cc-sheet__body">{children}</div>
-        {footer && <div className="cc-sheet__footer">{footer}</div>}
-      </div>
-    </>
-  )
-}
-
 function NoShift({ onClose, canOpenTill }: { onClose: () => void; canOpenTill: boolean }) {
   return (
     <>
@@ -122,7 +66,7 @@ function NoShift({ onClose, canOpenTill }: { onClose: () => void; canOpenTill: b
       </p>
       {canOpenTill && (
         <p style={{ marginTop: 12 }}>
-          <Link className="pos-button pos-button--primary pos-button--small" to="/" onClick={onClose}>
+          <Link className="pos-button pos-button--primary pos-button--small" to="/till" onClick={onClose}>
             Open a till
           </Link>
         </p>
@@ -259,10 +203,10 @@ export function CashActionSheet({
 
   if (kind === 'reconcile') {
     return (
-      <Sheet
-        variant="drawer"
+      <DashboardDrawer
+        open
         title="Reconcile cash"
-        blurb="Count the drawer, then close the shift on what you counted."
+        description="Count the drawer, then close the shift on what you counted."
         onClose={onClose}
         footer={
           eligible.length > 0 ? (
@@ -364,17 +308,17 @@ export function CashActionSheet({
             {error && <p className="cc-error">{error}</p>}
           </div>
         )}
-      </Sheet>
+      </DashboardDrawer>
     )
   }
 
   const copy = MOVEMENT_COPY[kind]
 
   return (
-    <Sheet
-      variant="modal"
+    <DashboardDrawer
+      open
       title={copy.title}
-      blurb={copy.blurb}
+      description={copy.blurb}
       onClose={onClose}
       footer={
         eligible.length > 0 ? (
@@ -443,6 +387,6 @@ export function CashActionSheet({
           {error && <p className="cc-error">{error}</p>}
         </div>
       )}
-    </Sheet>
+    </DashboardDrawer>
   )
 }

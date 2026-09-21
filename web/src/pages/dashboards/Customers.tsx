@@ -33,7 +33,7 @@ export default function Customers() {
       visibleTabs={tabs}
       filterControls={<DashboardFilterBar filters={filters} update={update} showTerminal={false} showComparison={false} />}
       freshnessLabel={<Freshness at={board.fetchedAt} refreshing={board.refreshing} />}
-      primaryAction={{ label: 'Open POS', to: '/' }}
+      primaryAction={{ label: 'Open POS', to: '/till' }}
       onRefresh={board.refresh}
       refreshing={board.refreshing}
       metrics={

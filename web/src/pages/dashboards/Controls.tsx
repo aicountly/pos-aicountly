@@ -11,7 +11,8 @@
  * the till's and the shift report's jobs and are linked to, not reimplemented.
  * The cash sheets post to `v1/shifts/{id}/drawer` and `v1/shifts/{id}/close`,
  * the same endpoints a cashier's screen uses, so there is exactly one path to
- * the drawer in this product.
+ * the drawer in this product. Export, the drawer shell, the panel error and the
+ * panel boundary are the shared ones the other boards use.
  *
  * THE PRIMARY BUTTON FOLLOWS THE TILL. Open a till when this browser's terminal
  * has no shift; close the shift when it has one. The mock this board was drawn
@@ -36,7 +37,7 @@ import { usePos } from '../../context/PosContext'
 import { api } from '../../services/api'
 import { count, dateTime, moneyExact, sinceLabel } from '../../dashboards/format'
 import { useVisibleDashboards } from '../../dashboards/registry'
-import { DashboardTabs } from '../../dashboards/shell'
+import { DashboardTabs, PanelBoundary } from '../../dashboards/shell'
 import {
   ApprovalQueue,
   AuditTimeline,
@@ -45,6 +46,7 @@ import {
 } from '../../dashboards/panels/controls'
 import type { ControlsBoard } from '../../dashboards/types'
 import { useBoard, useDashboardFilters } from '../../dashboards/useDashboard'
+import { downloadControlsCsv } from '../../dashboards/exportSummary'
 import {
   CashControlsFilters,
   activeQuickRange,
@@ -61,7 +63,7 @@ import { ControlsAlertsCard } from '../../dashboards/controls/ControlsAlertsCard
 import { CashQuickActionsCard, type QuickAction } from '../../dashboards/controls/CashQuickActionsCard'
 import { CashActionSheet, type CashActionKind } from '../../dashboards/controls/CashActionSheet'
 import { Toasts, type Toast } from '../../dashboards/controls/Toasts'
-import { BoardError, ControlsSkeleton, WidgetBoundary, WidgetEmptyState } from '../../dashboards/controls/primitives'
+import { BoardError, ControlsSkeleton, WidgetEmptyState } from '../../dashboards/controls/primitives'
 import {
   deriveAlerts,
   deriveKpis,
@@ -114,83 +116,6 @@ function LiveStatus({ at, refreshing }: { at: Date | null; refreshing: boolean }
       {stale ? 'Stale' : 'Live'} · updated {sinceLabel(at.toISOString())}
     </span>
   )
-}
-
-// ---------------------------------------------------------------------------
-// Export
-// ---------------------------------------------------------------------------
-
-function csvCell(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? '' : String(value)
-
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
-}
-
-/**
- * The filtered view, as a file.
- *
- * Built from the board already on screen rather than from a second request, so
- * what downloads is exactly what was being looked at. POS has no export
- * endpoint; when one lands this is the function to replace.
- */
-function exportBoard(board: ControlsBoard, period: string): void {
-  const rows: Array<Array<string | number | null>> = [
-    ['Aicountly POS — Cash, Shifts & Controls'],
-    ['Period', period],
-    ['From', board.window.from],
-    ['To', board.window.to],
-    ['Timezone', board.window.timezone],
-    ['Generated', board.window.generated_at],
-    ['Scope', board.window.scope_note],
-    [],
-    ['Shifts'],
-    ['Shift', 'Status', 'Counter', 'Outlet', 'Opened by', 'Opened at', 'Closed at', 'Opening float', 'Expected', 'Counted', 'Variance', 'Reason', 'Bills'],
-    ...board.shifts.map((shift) => [
-      shift.session_id,
-      shift.status,
-      shift.terminal_name ?? shift.terminal_code ?? '',
-      shift.location_name ?? '',
-      shift.opened_by,
-      shift.opened_at,
-      shift.closed_at ?? '',
-      shift.opening_float,
-      shift.expected_cash,
-      shift.counted_cash ?? '',
-      shift.variance ?? '',
-      shift.variance_reason ?? '',
-      shift.bills,
-    ]),
-    [],
-    ['Payment modes'],
-    ['Mode', 'Amount', 'Tenders', 'Settlement'],
-    ...board.tenders.lines.map((line) => [line.display_name, line.amount, line.count, line.settlement_label]),
-    [],
-    ['Cash movements'],
-    ['Event', 'When', 'Kind', 'Direction', 'Amount', 'Counter', 'By', 'Approved by', 'Reason'],
-    ...board.movements.map((movement) => [
-      movement.event_id,
-      movement.created_at,
-      movement.label,
-      movement.direction,
-      movement.amount,
-      movement.terminal_code ?? '',
-      movement.actor_uuid,
-      movement.approved_by ?? '',
-      movement.reason ?? '',
-    ]),
-  ]
-
-  const csv = rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-
-  link.href = url
-  link.download = `cash-shifts-controls-${board.window.from}-to-${board.window.to}.csv`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +227,7 @@ export default function Controls() {
         setSheet('reconcile')
       } else if (key === 'o' && openTill) {
         event.preventDefault()
-        navigate('/')
+        navigate('/till')
       } else if (key === 's') {
         event.preventDefault()
         document.getElementById('cc-shifts')?.scrollIntoView({ block: 'start' })
@@ -320,7 +245,7 @@ export default function Controls() {
     const actions: QuickAction[] = []
 
     if (openTill) {
-      actions.push({ id: 'open', label: 'Open a till', tone: 'green', icon: <Store size={19} />, to: '/', shortcut: 'Alt + O' })
+      actions.push({ id: 'open', label: 'Open a till', tone: 'green', icon: <Store size={19} />, to: '/till', shortcut: 'Alt + O' })
     }
     if (canClose) {
       actions.push({ id: 'close', label: 'Close shift', tone: 'blue', icon: <ShieldCheck size={19} />, to: '/reports' })
@@ -359,7 +284,7 @@ export default function Controls() {
   const primaryAction = myShift
     ? { label: 'Close the shift', to: '/reports' }
     : openTill
-      ? { label: 'Open a till', to: '/' }
+      ? { label: 'Open a till', to: '/till' }
       : null
 
   // ---- render --------------------------------------------------------------
@@ -397,7 +322,7 @@ export default function Controls() {
           <button
             type="button"
             className="pos-button pos-button--secondary pos-button--small"
-            onClick={() => data && exportBoard(data, period)}
+            onClick={() => data && downloadControlsCsv(data, filters)}
             disabled={data === null}
             title="Downloads the period on screen as a CSV"
           >
@@ -508,7 +433,7 @@ export default function Controls() {
           </div>
 
           <div className="cc-grid-primary" id="cc-shifts">
-            <WidgetBoundary title="Shift overview">
+            <PanelBoundary title="Shift overview">
               <ShiftOverviewCard
                 shifts={shiftRows}
                 totalShifts={allShifts.length}
@@ -517,9 +442,9 @@ export default function Controls() {
                 narrowed={activeCount > 0 && shiftRows.length < allShifts.length}
                 canOpenTill={openTill}
               />
-            </WidgetBoundary>
+            </PanelBoundary>
 
-            <WidgetBoundary title="Payment mode summary">
+            <PanelBoundary title="Payment mode summary">
               <PaymentModeSummaryCard
                 slices={payment.slices}
                 total={payment.total}
@@ -527,25 +452,25 @@ export default function Controls() {
                 periodLabel={period}
                 onPeriodChange={(id) => update(applyQuickRange(id))}
               />
-            </WidgetBoundary>
+            </PanelBoundary>
 
-            <WidgetBoundary title="Cash reconciliation">
+            <PanelBoundary title="Cash reconciliation">
               <CashReconciliationCard
                 view={reconciliation}
                 canReconcile={canClose}
                 onReconcile={() => setSheet('reconcile')}
               />
-            </WidgetBoundary>
+            </PanelBoundary>
           </div>
 
           <div className="cc-grid-secondary">
-            <WidgetBoundary title="Recent cash transactions">
+            <PanelBoundary title="Recent cash transactions">
               <RecentCashTransactionsCard rows={transactions} />
-            </WidgetBoundary>
+            </PanelBoundary>
 
-            <WidgetBoundary title="Controls and alerts">
+            <PanelBoundary title="Controls and alerts">
               <ControlsAlertsCard alerts={alerts} onFocusSession={(sessionId) => update({ sessionId })} />
-            </WidgetBoundary>
+            </PanelBoundary>
 
             {quickActions.length > 0 ? (
               <CashQuickActionsCard actions={quickActions} />

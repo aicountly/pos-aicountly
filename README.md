@@ -11,8 +11,16 @@ with a small PHP API alongside it. Both halves deploy to cPanel.
 ## What this app does today
 
 A working point of sale: retail checkout, restaurant tables and kitchen tickets,
-counter returns, shifts and the cash drawer — and **five dashboards** over the
-top of them.
+counter returns, shifts and the cash drawer — a **home screen** over the counter
+itself, and **five dashboards** over the business.
+
+`/` is the home screen and `/till` is the counter. The home screen answers, in
+this order, whether this counter can sell right now, what is in the way, and
+what the shop took today; its hero changes with the answer — set up a till,
+choose which till this browser is, open a shift, or sell. A cashier still goes
+straight to selling from the Till link, and the onboarding notice that used to
+be the whole screen for a new company now lives in that hero rather than above
+it. See [docs/DASHBOARDS.md](docs/DASHBOARDS.md#the-home-screen).
 
 | Board | Route |
 |---|---|
@@ -27,12 +35,23 @@ and what kind of shop the outlet is (`pos_mode`) — a retail-only outlet has no
 Restaurant tab rather than an empty one. Every endpoint enforces its own
 permission, so hiding a tab is presentation and nothing more.
 
+Restaurant Operations is the one that is a live operations screen rather than a
+report: it re-asks every 45 seconds, and the figures that ignore the date filter
+(tables, tickets, open orders) are labelled apart from the ones it windows
+(takings, serve time, tickets served).
+
+Alongside them, **Shift report** (`/reports`) is the handover screen: one
+cashier's shift at one till, from what it sold to whether the drawer balances,
+with the close-out itself behind a three-step count. See
+[docs/SHIFT_REPORT.md](docs/SHIFT_REPORT.md).
+
 The boards are careful about what they claim. There is no provider-confirmed
-tender total, no device connection status, no loyalty balance and no AI
-suggestion, because POS has none of those to report; each renders as an explicit
-*unavailable* state that looks different from an empty one. See
-[docs/DASHBOARDS.md](docs/DASHBOARDS.md) for the metric definitions, the expected
-cash formula and the exact contract gaps.
+tender total, no device connection status, no loyalty balance, no guest rating,
+no reservations and no AI model, because POS has none of those to report; each
+renders as an explicit *unavailable* state that looks different from an empty
+one, and every suggestion on every board is badged **Rule-based alert** because
+that is what it is. See [docs/DASHBOARDS.md](docs/DASHBOARDS.md) for the metric
+definitions, the expected cash formula and the exact contract gaps.
 
 Signing in is the AICOUNTLY portal's job, the same as every other AICOUNTLY
 SaaS: the app redirects to the portal, the portal returns an `auth_token`, and
@@ -46,10 +65,13 @@ See [docs/auth/AICOUNTLY_AUTH_WORKFLOW.md](docs/auth/AICOUNTLY_AUTH_WORKFLOW.md)
 ```
 web/          React app (Vite). Builds to web/dist, deployed to the document root.
   src/dashboards/   the .pos-* design system, shared shell, charts and filters
+  src/home/         the home screen: its view model, its parts and its styles
+  src/shift/        the Shift report: its panels, charts, hooks and stylesheet
   src/pages/        the operational screens, and dashboards/ for the five boards
 server-php/   PHP API. Deployed to the api/ folder inside the document root.
   src/Domain/Dashboards/   one board service per dashboard, plus the shared
                            filter window and the tender-state rules
+  src/Domain/Shift/        the Shift report aggregate and the shop's drawer policy
 docs/         architecture, dashboards, deployment and auth notes
 ```
 

@@ -165,7 +165,7 @@ export function ShiftOverviewCard({
           {!narrowed && canOpenTill && (
             <>
               {' '}
-              <Link className="cc-link" to="/">
+              <Link className="cc-link" to="/till">
                 Open a till
               </Link>
             </>

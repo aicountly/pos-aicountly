@@ -4,6 +4,7 @@ import { useAuth } from './auth/AuthProvider'
 import { PosProvider, usePos } from './context/PosContext'
 import { AppShell } from './shell/AppShell'
 import SignIn from './pages/SignIn'
+import Home from './pages/Home'
 import Till from './pages/Till'
 import Floor from './pages/Floor'
 import Kitchen from './pages/Kitchen'
@@ -15,7 +16,7 @@ import Retail from './pages/dashboards/Retail'
 import Restaurant from './pages/dashboards/Restaurant'
 import Customers from './pages/dashboards/Customers'
 import Controls from './pages/dashboards/Controls'
-import { ReturnDetail, ReturnsList } from './pages/Returns'
+import Returns from './pages/Returns'
 import { Notice } from './ui'
 import { initAnalytics, trackPageView } from './utils/analytics'
 import './App.css'
@@ -81,7 +82,11 @@ export default function App() {
         <PageViews />
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<RequireScope><Till /></RequireScope>} />
+            {/* The home screen is the landing page; the counter itself is /till,
+                so a cashier goes straight to selling and everyone else lands on
+                the state of the shop. */}
+            <Route index element={<RequireScope><Home /></RequireScope>} />
+            <Route path="till" element={<RequireScope><Till /></RequireScope>} />
 
             {/* The five dashboards. Each endpoint asserts its own permission, so
                 a URL typed by someone who may not see it answers 403 rather than
@@ -94,9 +99,12 @@ export default function App() {
 
             <Route path="floor" element={<RequireScope><Floor /></RequireScope>} />
             <Route path="kitchen" element={<RequireScope><Kitchen /></RequireScope>} />
+            {/* One screen, two addresses: `/returns/:id` is the register with
+                that return's panel open, so a return is a link somebody can
+                send rather than a page they have to navigate to. */}
             <Route path="returns">
-              <Route index element={<RequireScope><ReturnsList /></RequireScope>} />
-              <Route path=":id" element={<RequireScope><ReturnDetail /></RequireScope>} />
+              <Route index element={<RequireScope><Returns /></RequireScope>} />
+              <Route path=":id" element={<RequireScope><Returns /></RequireScope>} />
             </Route>
             <Route path="offline" element={<RequireScope><OfflineQueue /></RequireScope>} />
             <Route path="reports" element={<RequireScope><Reports /></RequireScope>} />
