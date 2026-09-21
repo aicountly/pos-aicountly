@@ -801,3 +801,33 @@
     animation: none !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Combination chart and donut
+   -------------------------------------------------------------------------- */
+
+.pos-chart__bar--soft { fill: #cfc7ff; }
+.pos-chart__line--accent { stroke: #7448ea; }
+.pos-chart__point--accent { fill: #7448ea; }
+
+.pos-donut { display: grid; gap: 10px; min-width: 0; }
+
+.pos-donut__ring {
+  display: block;
+  width: 100%;
+  max-width: 148px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.pos-donut__figure {
+  fill: var(--pos-text);
+  font-size: 25px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-donut__caption {
+  fill: var(--pos-muted);
+  font-size: 10px;
+}

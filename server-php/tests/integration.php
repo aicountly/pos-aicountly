@@ -1106,6 +1106,166 @@ check('a return against an unfinished sale is refused', function () use ($ctx, $
     );
 });
 
+check('the register and the figures above it are built from one filter', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId);
+    $cart = seedCart($ctx, $auth, $terminalId, $sessionId);
+    $cartId = (int) $cart['cart_id'];
+    (new CheckoutService($ctx, $auth))->checkout($cartId, ['payments' => [['payment_mode' => 'cash', 'amount' => 519.2]]]);
+    Db::update('pos_carts', ['customer_name' => 'Amit Sharma'], ['cart_id' => $cartId, 'cmp_id' => $ctx->cmpId]);
+
+    $returns = new ReturnService($ctx, $auth);
+    $returns->create([
+        'cart_id' => $cartId, 'session_id' => $sessionId, 'resolution' => 'refund_cash', 'reason_code' => 'size_fit',
+        'lines' => [['item_id' => 101, 'return_qty' => 1, 'rate' => 120, 'display_name' => 'Stub item 101']],
+    ]);
+    $returns->create([
+        'cart_id' => $cartId, 'session_id' => $sessionId, 'resolution' => 'exchange', 'reason_code' => 'damaged',
+        'lines' => [['item_id' => 102, 'return_qty' => 1, 'rate' => 200, 'display_name' => 'Stub item 102']],
+    ]);
+
+    [$rows, $total] = $returns->listReturns([], 50, 0);
+    assertSame(2, $total, 'both returns are in the register');
+    assertSame('Amit Sharma', $rows[0]['customer_name'], 'the customer is read from the sale, not copied onto the return');
+    assertSame('retail', $rows[0]['order_kind'], 'and so is the channel');
+    assertSame(1, $rows[0]['line_count'], 'the line count is aggregated on the server');
+
+    [, $exchanges] = $returns->listReturns(['resolution' => 'exchange'], 50, 0);
+    assertSame(1, $exchanges, 'the type filter narrows to exchanges');
+
+    [, $searched] = $returns->listReturns(['search' => 'Stub item 102'], 50, 0);
+    assertSame(1, $searched, 'search reaches the items that came back');
+
+    [, $byCustomer] = $returns->listReturns(['search' => 'Amit'], 50, 0);
+    assertSame(2, $byCustomer, 'and the customer on the original sale');
+
+    $summary = $returns->summary([]);
+    assertSame(2, $summary['kpis']['total_returns'], 'the KPI counts the same rows the register does');
+    assertSame(320.0, $summary['kpis']['return_value'], 'value credited');
+    assertSame(2.0, $summary['kpis']['items_returned'], 'quantity across every returned line');
+    assertSame(50.0, $summary['kpis']['exchange_ratio_pc'], 'one of the two was an exchange');
+    assertSame(1, $summary['register_counts']['exchanges'], 'the Exchanges tab count');
+    assertSame(1, $summary['register_counts']['refunds'], 'the Refunds tab count');
+    assertSame(2, $summary['register_counts']['pending'], 'neither has been settled');
+
+    assertSame(2, count($summary['reasons']), 'both reasons are counted');
+    assertSame(50.0, $summary['reasons'][0]['share_pc'], 'each reason took half the items');
+    assertSame('retail', $summary['channels'][0]['channel'], 'both came off in-store sales');
+    assertSame(100.0, $summary['channels'][0]['share_pc'], 'which is all of them');
+});
+
+check('an empty window reports no exchange rate rather than nought per cent', function () use ($ctx, $auth) {
+    resetDatabase();
+    seedOutlet($ctx);
+
+    $summary = (new ReturnService($ctx, $auth))->summary([]);
+    assertSame(0, $summary['kpis']['total_returns'], 'nothing came back');
+    assertSame(null, $summary['kpis']['exchange_ratio_pc'], 'and no share is asserted on nothing');
+    assertSame([], $summary['reasons'], 'no reasons to attribute');
+});
+
+check('the trend has a point for every day, and compares against the window before it', function () use ($ctx, $auth) {
+    resetDatabase();
+    seedOutlet($ctx);
+
+    $to = gmdate('Y-m-d');
+    $from = gmdate('Y-m-d', strtotime($to . ' -6 days'));
+
+    $summary = (new ReturnService($ctx, $auth))->summary(['from' => $from, 'to' => $to]);
+
+    assertSame(7, count($summary['trend']), 'seven days, including the quiet ones');
+    assertSame($from, $summary['trend'][0]['date'], 'starting on the first day of the window');
+    assertSame(0, $summary['trend'][0]['return_count'], 'a day with nothing is a zero, not a missing point');
+
+    assertSame(7, $summary['comparison_window']['days'], 'the comparison window is the same length');
+    assertSame(gmdate('Y-m-d', strtotime($from . ' -1 day')), $summary['comparison_window']['to'], 'and ends the day before this one starts');
+});
+
+check('what the till offers to return is what the server will accept', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId);
+    $cart = seedCart($ctx, $auth, $terminalId, $sessionId);
+    $cartId = (int) $cart['cart_id'];
+    (new CheckoutService($ctx, $auth))->checkout($cartId, ['payments' => [['payment_mode' => 'cash', 'amount' => 519.2]]]);
+
+    $returns = new ReturnService($ctx, $auth);
+
+    $before = $returns->eligibility($cartId);
+    assertTrue($before['returnable'], 'a completed sale can be returned against');
+    assertSame(3, count($before['lines']) + 1, 'both sold lines are offered');
+    $item101 = array_values(array_filter($before['items'], static fn (array $i) => $i['item_id'] === 101))[0];
+    assertSame(2.0, $item101['returnable_qty'], 'two were sold and none has come back');
+
+    $returns->create([
+        'cart_id' => $cartId, 'reason_code' => 'damaged',
+        'lines' => [['item_id' => 101, 'return_qty' => 1, 'rate' => 120, 'display_name' => 'Stub item 101']],
+    ]);
+
+    $after = $returns->eligibility($cartId);
+    $item101 = array_values(array_filter($after['items'], static fn (array $i) => $i['item_id'] === 101))[0];
+    assertSame(1.0, $item101['returnable_qty'], 'one is left');
+    assertSame(1, count($after['returns']), 'and the earlier return is listed against the sale');
+
+    // The screen and the server must agree: one more is fine, two is refused.
+    assertThrows(
+        fn () => $returns->create([
+            'cart_id' => $cartId, 'reason_code' => 'damaged',
+            'lines' => [['item_id' => 101, 'return_qty' => 2, 'rate' => 120, 'display_name' => 'Stub item 101']],
+        ]),
+        'can still come back',
+        'asking for more than eligibility offered is refused',
+    );
+});
+
+check('a return with no linked sale is labelled as one, not counted as a walk-in', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    openShift($ctx, $auth, $terminalId);
+
+    $returns = new ReturnService($ctx, $auth);
+    $returns->create([
+        'terminal_id' => $terminalId,
+        'reason_note' => 'Paper invoice from the old till',
+        'lines' => [['item_id' => 101, 'return_qty' => 1, 'rate' => 120, 'display_name' => 'Stub item 101']],
+    ]);
+
+    $summary = $returns->summary([]);
+    assertSame(ReturnService::CHANNEL_UNLINKED, $summary['channels'][0]['channel'], 'no sale means no channel, and it says so');
+    assertSame(ReturnService::REASON_UNSPECIFIED, $summary['reasons'][0]['reason_code'], 'no reason code means unspecified, counted rather than hidden');
+
+    [$rows] = $returns->listReturns([], 50, 0);
+    assertSame(null, $rows[0]['customer_name'], 'and there is no customer to read');
+});
+
+check('the detail carries the sale and the till without storing either', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId);
+    $cart = seedCart($ctx, $auth, $terminalId, $sessionId);
+    $cartId = (int) $cart['cart_id'];
+    (new CheckoutService($ctx, $auth))->checkout($cartId, ['payments' => [['payment_mode' => 'cash', 'amount' => 519.2]]]);
+    Db::update('pos_carts', ['customer_name' => 'Priya Mehta'], ['cart_id' => $cartId, 'cmp_id' => $ctx->cmpId]);
+
+    $returns = new ReturnService($ctx, $auth);
+    $return = $returns->create([
+        'cart_id' => $cartId, 'session_id' => $sessionId, 'terminal_id' => $terminalId, 'reason_code' => 'size_fit',
+        'lines' => [['item_id' => 101, 'return_qty' => 1, 'rate' => 120, 'display_name' => 'Stub item 101']],
+    ]);
+
+    assertSame('Priya Mehta', $return['context']['customer_name'], 'the customer is joined at read time');
+    assertSame('T1', $return['context']['terminal_code'], 'and so is the till');
+    assertSame('retail', $return['context']['channel'], 'and the channel of the original sale');
+    assertSame(null, $return['context']['exchange_sale'], 'nothing was exchanged, so nothing is invented');
+
+    // Renaming the till renames it on the return too, which is the point of
+    // joining rather than copying.
+    Db::update('pos_terminals', ['terminal_code' => 'T9'], ['terminal_id' => $terminalId, 'cmp_id' => $ctx->cmpId]);
+    $again = $returns->find((int) $return['return_id']);
+    assertSame('T9', $again['context']['terminal_code'], 'the return followed the rename');
+});
+
 echo "\nAudit\n";
 
 check('the audit log cannot be edited or deleted', function () use ($ctx, $auth) {
