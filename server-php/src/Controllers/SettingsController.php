@@ -107,10 +107,33 @@ final class SettingsController extends Controller
                 $values[$field] = round((float) $body[$field], 3);
             }
         }
-        foreach (['offline_grace_minutes', 'cache_warn_after_minutes'] as $field) {
+        if (isset($body['cash_variance_tolerance']) && is_numeric($body['cash_variance_tolerance'])) {
+            $values['cash_variance_tolerance'] = max(0.0, round((float) $body['cash_variance_tolerance'], 4));
+        }
+        foreach (['offline_grace_minutes', 'cache_warn_after_minutes', 'no_sale_review_threshold'] as $field) {
             if (isset($body[$field]) && is_numeric($body[$field])) {
                 $values[$field] = max(0, (int) $body[$field]);
             }
+        }
+
+        // What this shop counts its drawer in. Largest first, no duplicates,
+        // and nothing at or below zero — a denomination list is the shop's
+        // own configuration, not a currency master POS gets to invent.
+        if (isset($body['cash_denominations']) && is_array($body['cash_denominations'])) {
+            $denominations = [];
+            foreach ($body['cash_denominations'] as $value) {
+                if (is_numeric($value) && (float) $value > 0) {
+                    $denominations[] = round((float) $value, 4);
+                }
+            }
+            if ($denominations === []) {
+                Http::validationFailed('A drawer is counted in something. Give at least one denomination.', [
+                    'field' => 'cash_denominations',
+                ]);
+            }
+            $denominations = array_values(array_unique($denominations));
+            rsort($denominations);
+            $values['cash_denominations'] = $denominations;
         }
         foreach (['require_reason_on_void', 'require_reason_on_return'] as $field) {
             if (array_key_exists($field, $body)) {
@@ -166,6 +189,9 @@ final class SettingsController extends Controller
         $row['cashier_discount_limit_pc'] = (float) ($row['cashier_discount_limit_pc'] ?? 0);
         $row['offline_grace_minutes'] = (int) ($row['offline_grace_minutes'] ?? 0);
         $row['cache_warn_after_minutes'] = (int) ($row['cache_warn_after_minutes'] ?? 120);
+        $row['cash_variance_tolerance'] = (float) ($row['cash_variance_tolerance'] ?? 0);
+        $row['no_sale_review_threshold'] = (int) ($row['no_sale_review_threshold'] ?? 5);
+        $row['cash_denominations'] = Db::jsonColumn($row['cash_denominations'] ?? null);
 
         return $row;
     }

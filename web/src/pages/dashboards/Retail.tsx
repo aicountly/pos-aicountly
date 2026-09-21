@@ -33,7 +33,7 @@ export default function Retail() {
       visibleTabs={tabs}
       filterControls={<DashboardFilterBar filters={filters} update={update} showComparison={false} />}
       freshnessLabel={<Freshness at={board.fetchedAt} refreshing={board.refreshing} />}
-      primaryAction={{ label: 'Start a sale', to: '/' }}
+      primaryAction={{ label: 'Start a sale', to: '/till' }}
       onRefresh={board.refresh}
       refreshing={board.refreshing}
       metrics={

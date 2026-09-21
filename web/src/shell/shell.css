@@ -211,9 +211,9 @@
   background: var(--bg);
 }
 
-/* The dashboards and the offline queue bring their own padding; everything
-   else gets it here. */
-.shell-content > :not(.pos-workspace):not(.pos-offline) { padding: 20px; }
+/* The dashboards, the home screen and the offline queue bring their own
+   padding; everything else gets it here. */
+.shell-content > :not(.pos-workspace):not(.pos-home):not(.pos-offline) { padding: 20px; }
 
 .shell-scrim {
   display: none;
@@ -257,7 +257,7 @@
   }
 
   .shell-header__right { justify-content: space-between; }
-  .shell-content > :not(.pos-workspace):not(.pos-offline) { padding: 14px; }
+  .shell-content > :not(.pos-workspace):not(.pos-home):not(.pos-offline) { padding: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

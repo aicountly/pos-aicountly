@@ -184,14 +184,45 @@ export function TimelineEntry({
   )
 }
 
-/** "Updated 2m ago", with the absolute time in the tooltip. */
+/** How long a dashboard may sit unrefreshed before it is called stale, in seconds. */
+const STALE_AFTER = 300
+
+/**
+ * When these figures were counted.
+ *
+ * STALE IS SAID, NOT IMPLIED. A board someone left open over lunch shows the
+ * lunchtime figures under this morning's heading, and the only thing standing
+ * between a manager and a decision made on an hour-old number is this line. So
+ * past five minutes it stops reading "Updated" and starts reading "Stale",
+ * changes its dot AND its words — never the dot alone — and the full
+ * explanation stays in the tooltip where it is not costing a row of the filter
+ * bar.
+ */
 export function Freshness({ at, refreshing }: { at: Date | null; refreshing: boolean }) {
-  if (refreshing) return <>Refreshing…</>
-  if (!at) return <>Not loaded yet</>
+  if (refreshing) {
+    return (
+      <span className="pos-freshness__line">
+        <span className="pos-freshness__dot pos-freshness__dot--busy" aria-hidden /> Refreshing…
+      </span>
+    )
+  }
+
+  if (!at) return <span className="pos-freshness__line">Not loaded yet</span>
+
+  const ageSeconds = (Date.now() - at.getTime()) / 1000
+  const stale = ageSeconds > STALE_AFTER
+  const clockTime = at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 
   return (
-    <span title={at.toLocaleString()}>
-      Updated {duration((Date.now() - at.getTime()) / 1000)} ago · figures are counted from this POS
+    <span
+      className="pos-freshness__line"
+      title={`Counted ${duration(ageSeconds)} ago, at ${at.toLocaleString()}. Figures are counted from this POS; Books owns the accounting figure and it can differ.`}
+    >
+      <span
+        className={stale ? 'pos-freshness__dot pos-freshness__dot--stale' : 'pos-freshness__dot'}
+        aria-hidden
+      />
+      {stale ? `Stale · ${clockTime}` : `Updated ${clockTime}`}
     </span>
   )
 }
