@@ -16,7 +16,7 @@ import Retail from './pages/dashboards/Retail'
 import Restaurant from './pages/dashboards/Restaurant'
 import Customers from './pages/dashboards/Customers'
 import Controls from './pages/dashboards/Controls'
-import { ReturnDetail, ReturnsList } from './pages/Returns'
+import Returns from './pages/Returns'
 import { Notice } from './ui'
 import { initAnalytics, trackPageView } from './utils/analytics'
 import './App.css'
@@ -99,9 +99,12 @@ export default function App() {
 
             <Route path="floor" element={<RequireScope><Floor /></RequireScope>} />
             <Route path="kitchen" element={<RequireScope><Kitchen /></RequireScope>} />
+            {/* One screen, two addresses: `/returns/:id` is the register with
+                that return's panel open, so a return is a link somebody can
+                send rather than a page they have to navigate to. */}
             <Route path="returns">
-              <Route index element={<RequireScope><ReturnsList /></RequireScope>} />
-              <Route path=":id" element={<RequireScope><ReturnDetail /></RequireScope>} />
+              <Route index element={<RequireScope><Returns /></RequireScope>} />
+              <Route path=":id" element={<RequireScope><Returns /></RequireScope>} />
             </Route>
             <Route path="offline" element={<RequireScope><OfflineQueue /></RequireScope>} />
             <Route path="reports" element={<RequireScope><Reports /></RequireScope>} />

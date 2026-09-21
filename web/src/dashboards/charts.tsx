@@ -937,3 +937,223 @@ export function Heatmap({
     </div>
   )
 }
+
+export interface ComboPoint {
+  key: string
+  label: string
+  /** The column — a count. */
+  bar: number
+  /** The line — a value. */
+  line: number
+  /** What a hover should say, in full. */
+  title: string
+}
+
+/**
+ * Columns and a line over the same days, on two scales.
+ *
+ * A count and a rupee total share an axis only by coincidence, so they get one
+ * each — left for the columns, right for the line — and each axis is labelled
+ * in the units it is in. Without that, twelve returns and twelve thousand
+ * rupees plot as the same height and the chart is decoration.
+ */
+export function ComboTrendChart({
+  points,
+  barLabel,
+  lineLabel,
+  formatBar,
+  formatLine,
+  height = 230,
+  tableVisible = false,
+  caption,
+}: {
+  points: ComboPoint[]
+  barLabel: string
+  lineLabel: string
+  formatBar: (value: number) => string
+  formatLine: (value: number) => string
+  height?: number
+  tableVisible?: boolean
+  caption: string
+}) {
+  const titleId = useId()
+
+  if (points.length === 0) {
+    return <p className="pos-muted">Nothing to plot for this period.</p>
+  }
+
+  const width = 680
+  const pad = { top: 14, right: 54, bottom: 26, left: 46 }
+  const innerW = width - pad.left - pad.right
+  const innerH = height - pad.top - pad.bottom
+
+  const maxBar = Math.max(1, ...points.map((p) => p.bar))
+  const maxLine = Math.max(1, ...points.map((p) => p.line))
+
+  const slot = innerW / points.length
+  const barW = Math.max(2, Math.min(26, slot * 0.52))
+  const centre = (i: number) => pad.left + i * slot + slot / 2
+  const lineY = (value: number) => pad.top + innerH - (value / maxLine) * innerH
+  const ticks = tickIndexes(points.length)
+
+  const linePoints = points.map((p, i) => ({ x: centre(i), y: lineY(p.line) }))
+
+  return (
+    <div className="pos-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby={titleId} preserveAspectRatio="none">
+        <title id={titleId}>{caption}</title>
+
+        {[0, 0.5, 1].map((fraction) => {
+          const y = pad.top + innerH - fraction * innerH
+
+          return (
+            <g key={fraction}>
+              <line className="pos-chart__grid" x1={pad.left} x2={width - pad.right} y1={y} y2={y} />
+              <text className="pos-chart__axis" x={pad.left - 8} y={y + 3} textAnchor="end">
+                {formatBar(maxBar * fraction)}
+              </text>
+              <text className="pos-chart__axis" x={width - pad.right + 8} y={y + 3} textAnchor="start">
+                {formatLine(maxLine * fraction)}
+              </text>
+            </g>
+          )
+        })}
+
+        {points.map((point, i) => {
+          const barH = (point.bar / maxBar) * innerH
+
+          return (
+            <rect
+              key={point.key}
+              className="pos-chart__bar pos-chart__bar--soft"
+              x={centre(i) - barW / 2}
+              y={pad.top + innerH - barH}
+              width={barW}
+              height={Math.max(0, barH)}
+              rx={3}
+            >
+              <title>{point.title}</title>
+            </rect>
+          )
+        })}
+
+        <path className="pos-chart__line pos-chart__line--accent" d={path(linePoints)} />
+
+        {points.length <= 40 &&
+          linePoints.map((p, i) => (
+            <circle key={points[i].key} className="pos-chart__point pos-chart__point--accent" cx={p.x} cy={p.y} r={2.5}>
+              <title>{points[i].title}</title>
+            </circle>
+          ))}
+
+        {ticks.map((i) => (
+          <text key={points[i].key} className="pos-chart__axis" x={centre(i)} y={height - 8} textAnchor="middle">
+            {points[i].label}
+          </text>
+        ))}
+      </svg>
+
+      <ChartTable
+        visible={tableVisible}
+        caption={caption}
+        columns={['Day', barLabel, lineLabel]}
+        rows={points.map((p) => [p.label, formatBar(p.bar), formatLine(p.line)])}
+      />
+    </div>
+  )
+}
+
+export interface RingSlice {
+  key: string
+  label: string
+  value: number
+  colour: string
+  /** The figure to print beside the label, already formatted. */
+  display: string
+  share: number
+}
+
+/**
+ * A share, as a bare ring with a figure in the middle.
+ *
+ * NOT DonutChart, which is above and does a different job: that one owns its
+ * own legend table and is complete on its own. This one draws the ring and
+ * nothing else, because the register's legend rows are buttons that narrow the
+ * table, and a component that renders its own legend cannot make them that.
+ * The two could share their arc arithmetic; until they do, changing one does
+ * not change the other.
+ *
+ * A share, as a ring with the total in the middle.
+ *
+ * The ring is the summary; the list beside it is the data. Nothing here depends
+ * on telling two colours apart — every slice has its label, its figure and its
+ * share written next to it, and the table underneath carries all three for a
+ * screen reader.
+ */
+export function RingChart({
+  slices,
+  centreValue,
+  centreLabel,
+  caption,
+  tableVisible = false,
+}: {
+  slices: RingSlice[]
+  centreValue: string
+  centreLabel: string
+  caption: string
+  tableVisible?: boolean
+}) {
+  const titleId = useId()
+  const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0)
+
+  const radius = 56
+  const circumference = 2 * Math.PI * radius
+  let consumed = 0
+
+  return (
+    <div className="pos-ring">
+      <svg viewBox="0 0 140 140" role="img" aria-labelledby={titleId} className="pos-ring__svg">
+        <title id={titleId}>{caption}</title>
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="#eef2ef" strokeWidth="17" />
+
+        {total > 0 &&
+          slices.map((slice) => {
+            const length = (Math.max(0, slice.value) / total) * circumference
+            const offset = -consumed
+            consumed += length
+
+            return (
+              <circle
+                key={slice.key}
+                cx="70"
+                cy="70"
+                r={radius}
+                fill="none"
+                stroke={slice.colour}
+                strokeWidth="17"
+                strokeDasharray={`${length.toFixed(2)} ${(circumference - length).toFixed(2)}`}
+                strokeDashoffset={offset.toFixed(2)}
+                transform="rotate(-90 70 70)"
+              >
+                <title>{`${slice.label}: ${slice.display} (${slice.share.toFixed(0)}%)`}</title>
+              </circle>
+            )
+          })}
+
+        <text className="pos-ring__figure" x="70" y="68" textAnchor="middle">
+          {centreValue}
+        </text>
+        <text className="pos-ring__caption" x="70" y="86" textAnchor="middle">
+          {centreLabel}
+        </text>
+      </svg>
+
+      <ChartTable
+        visible={tableVisible}
+        caption={caption}
+        columns={['Category', 'Figure', 'Share']}
+        rows={slices.map((slice) => [slice.label, slice.display, `${slice.share.toFixed(1)}%`])}
+      />
+    </div>
+  )
+}
