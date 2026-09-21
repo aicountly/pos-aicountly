@@ -364,14 +364,173 @@ final class KotService
      * Ordered oldest first — a kitchen works a queue, and a screen that sorts
      * any other way loses tickets at the bottom.
      *
+     * Carries what a kitchen screen has to show WITHOUT a second round trip:
+     * the order kind (a takeaway is handed over, a dine-in is carried to a
+     * table), the table, the customer, the outlet, the station and that
+     * station's OWN late threshold. None of it is stored on the ticket —
+     * order_kind and the customer are read live off the cart the ticket
+     * belongs to, exactly as the restaurant board reads them.
+     *
+     * @param array<string, mixed> $filters
      * @return list<array<string, mixed>>
      */
     public function display(?int $stationId, array $filters = []): array
     {
         Permissions::assert($this->ctx, $this->auth, 'kds.operate');
 
+        [$where, $params] = $this->scopeFilter($stationId, $filters);
+        $where[] = "k.status NOT IN ('SERVED', 'CANCELLED')";
+
+        return $this->tickets($where, $params, 'k.fired_at ASC', 200);
+    }
+
+    /**
+     * Tickets the kitchen finished a moment ago.
+     *
+     * A kitchen screen that drops a ticket the instant it is served gives the
+     * pass nothing to check against — "did that go out?" is asked constantly,
+     * and the answer has to be on the same screen. Bounded by BOTH a window
+     * and a count, because a busy service would otherwise carry a thousand.
+     *
+     * @param array<string, mixed> $filters
+     * @return list<array<string, mixed>>
+     */
+    public function servedRecently(?int $stationId, array $filters = [], int $limit = 10, int $withinMinutes = 120): array
+    {
+        Permissions::assert($this->ctx, $this->auth, 'kds.operate');
+
+        [$where, $params] = $this->scopeFilter($stationId, $filters);
+        $where[] = "k.status = 'SERVED'";
+        $where[] = 'k.served_at IS NOT NULL';
+        $where[] = 'k.served_at >= :since';
+        $params['since'] = gmdate('Y-m-d H:i:s', time() - max(5, $withinMinutes) * 60);
+
+        return $this->tickets($where, $params, 'k.served_at DESC', max(1, min(50, $limit)));
+    }
+
+    /**
+     * What each station is carrying right now.
+     *
+     * The kitchen's own answer to "where is the load?" — a screen that shows
+     * only a total cannot tell a tandoor drowning from a bar idling.
+     *
+     * @param array<string, mixed> $filters
+     * @return list<array<string, mixed>>
+     */
+    public function stationLoad(array $filters = []): array
+    {
+        Permissions::assert($this->ctx, $this->auth, 'kds.operate');
+
         $params = ['cmp' => $this->ctx->cmpId];
-        $where = ["k.cmp_id = :cmp", "k.status NOT IN ('SERVED', 'CANCELLED')"];
+        $locationFilter = '';
+        if (!empty($filters['location_id'])) {
+            $locationFilter = ' AND s.location_id = :loc';
+            $params['loc'] = (int) $filters['location_id'];
+        }
+
+        $rows = Db::all(
+            "SELECT s.station_id, s.station_code, s.station_name, s.station_kind, s.location_id,
+                    COALESCE(s.late_after_minutes, 15) AS late_after_minutes,
+                    COUNT(k.kot_id) FILTER (WHERE k.status IN ('NEW', 'ACCEPTED', 'PREPARING', 'READY')) AS live,
+                    COUNT(k.kot_id) FILTER (
+                        WHERE k.status IN ('NEW', 'ACCEPTED', 'PREPARING')
+                          AND EXTRACT(EPOCH FROM (NOW() - k.fired_at)) > COALESCE(s.late_after_minutes, 15) * 60
+                    ) AS late
+             FROM pos_kds_stations s
+             LEFT JOIN pos_kots k
+                    ON k.station_id = s.station_id
+                   AND k.cmp_id = s.cmp_id
+                   AND k.status NOT IN ('SERVED', 'CANCELLED')
+             WHERE s.cmp_id = :cmp AND s.is_active = TRUE{$locationFilter}
+             GROUP BY s.station_id
+             ORDER BY s.sort_order, s.station_name",
+            $params,
+        );
+
+        return array_map(static fn (array $r): array => [
+            'station_id'         => (int) $r['station_id'],
+            'station_code'       => (string) $r['station_code'],
+            'station_name'       => (string) $r['station_name'],
+            'station_kind'       => (string) $r['station_kind'],
+            'location_id'        => (int) $r['location_id'],
+            'late_after_minutes' => (int) $r['late_after_minutes'],
+            'live'               => (int) $r['live'],
+            'late'               => (int) $r['late'],
+        ], $rows);
+    }
+
+    /**
+     * Today's kitchen performance, counted by PostgreSQL over this POS's own
+     * tickets.
+     *
+     * "Today" is the OUTLET's trading day, not the server's UTC one — a
+     * kitchen closing at 1am would otherwise see its on-time figure reset
+     * mid-service. With no outlet chosen the outlets may disagree, so the
+     * honest answer is UTC midnight.
+     *
+     * Prep time is fired → ready, which is what the kitchen controls. Serving
+     * is the floor's to answer for, and folding it in would mark the kitchen
+     * down for a waiter who was slow to the pass. On time is measured against
+     * each ticket's OWN station threshold for the same reason `is_late` is.
+     *
+     * @param array<string, mixed> $filters
+     * @return array<string, mixed>
+     */
+    public function metrics(?int $stationId, array $filters = []): array
+    {
+        Permissions::assert($this->ctx, $this->auth, 'kds.operate');
+
+        $locationId = empty($filters['location_id']) ? null : (int) $filters['location_id'];
+        [$timezone, $dayStart] = $this->tradingDay($locationId);
+
+        [$where, $params] = $this->scopeFilter($stationId, $filters);
+        $where[] = 'k.ready_at IS NOT NULL';
+        $where[] = 'k.fired_at >= :day_start';
+        $params['day_start'] = $dayStart;
+
+        $row = Db::first(
+            'SELECT COUNT(*) AS completed,
+                    AVG(EXTRACT(EPOCH FROM (k.ready_at - k.fired_at)))::bigint AS avg_prep_seconds,
+                    (PERCENTILE_CONT(0.5) WITHIN GROUP (
+                        ORDER BY EXTRACT(EPOCH FROM (k.ready_at - k.fired_at))
+                    ))::bigint AS median_prep_seconds,
+                    COUNT(*) FILTER (
+                        WHERE EXTRACT(EPOCH FROM (k.ready_at - k.fired_at))
+                              <= COALESCE(s.late_after_minutes, 15) * 60
+                    ) AS on_time
+             FROM pos_kots k
+             LEFT JOIN pos_kds_stations s ON s.station_id = k.station_id
+             WHERE ' . implode(' AND ', $where),
+            $params,
+        ) ?? [];
+
+        $completed = (int) ($row['completed'] ?? 0);
+        $onTime = (int) ($row['on_time'] ?? 0);
+
+        return [
+            // Null rather than zero: "no ticket has been finished yet" and
+            // "every ticket took no time" are different facts, and a screen
+            // that renders them the same is lying about one of them.
+            'completed'           => $completed,
+            'avg_prep_seconds'    => $completed === 0 ? null : (int) ($row['avg_prep_seconds'] ?? 0),
+            'median_prep_seconds' => $completed === 0 ? null : (int) ($row['median_prep_seconds'] ?? 0),
+            'on_time'             => $onTime,
+            'on_time_pc'          => $completed === 0 ? null : round($onTime / $completed * 100, 1),
+            'trading_day_start'   => $dayStart,
+            'timezone'            => $timezone,
+        ];
+    }
+
+    /**
+     * The WHERE fragments every kitchen query shares.
+     *
+     * @param array<string, mixed> $filters
+     * @return array{0: list<string>, 1: array<string, mixed>}
+     */
+    private function scopeFilter(?int $stationId, array $filters): array
+    {
+        $params = ['cmp' => $this->ctx->cmpId];
+        $where = ['k.cmp_id = :cmp'];
 
         if ($stationId !== null) {
             $where[] = 'k.station_id = :station';
@@ -382,15 +541,37 @@ final class KotService
             $params['loc'] = (int) $filters['location_id'];
         }
 
+        return [$where, $params];
+    }
+
+    /**
+     * Read tickets and their lines, with the ageing already worked out.
+     *
+     * Two queries whatever the count — the lines come back in one pass keyed
+     * by ticket rather than one query per card.
+     *
+     * @param list<string>         $where
+     * @param array<string, mixed> $params
+     * @return list<array<string, mixed>>
+     */
+    private function tickets(array $where, array $params, string $order, int $limit): array
+    {
         $kots = Db::all(
-            'SELECT k.*, s.station_name, s.late_after_minutes, t.table_code
+            'SELECT k.*, s.station_name, s.station_code, s.station_kind,
+                    COALESCE(s.late_after_minutes, 15) AS late_after_minutes,
+                    t.table_code, t.table_name, ts.covers, ts.waiter_uuid AS table_waiter_uuid,
+                    c.order_kind, c.customer_name, c.offline_created,
+                    l.display_name AS location_name, l.location_code,
+                    EXTRACT(EPOCH FROM (NOW() - k.fired_at))::bigint AS elapsed_seconds
              FROM pos_kots k
              LEFT JOIN pos_kds_stations s ON s.station_id = k.station_id
              LEFT JOIN pos_table_sessions ts ON ts.table_session_id = k.table_session_id
              LEFT JOIN pos_tables t ON t.table_id = ts.table_id
+             LEFT JOIN pos_carts c ON c.cart_id = k.cart_id
+             LEFT JOIN pos_location_profiles l ON l.location_id = k.location_id
              WHERE ' . implode(' AND ', $where) . '
-             ORDER BY k.fired_at
-             LIMIT 200',
+             ORDER BY ' . $order . '
+             LIMIT ' . $limit,
             $params,
         );
 
@@ -407,6 +588,7 @@ final class KotService
 
         $linesByKot = [];
         foreach (Db::all('SELECT * FROM pos_kot_lines WHERE kot_id IN (' . $placeholders . ') ORDER BY kot_id, line_no', $lineParams) as $line) {
+            $line['kot_line_id'] = (int) $line['kot_line_id'];
             $line['modifiers'] = Db::jsonColumn($line['modifiers'] ?? null);
             $line['quantity'] = (float) $line['quantity'];
             $linesByKot[(int) $line['kot_id']][] = $line;
@@ -416,15 +598,79 @@ final class KotService
 
         return array_map(static function (array $kot) use ($linesByKot, $now): array {
             $kot['kot_id'] = (int) $kot['kot_id'];
+            $kot['station_id'] = $kot['station_id'] === null ? null : (int) $kot['station_id'];
+            $kot['location_id'] = $kot['location_id'] === null ? null : (int) $kot['location_id'];
+            $kot['cart_id'] = $kot['cart_id'] === null ? null : (int) $kot['cart_id'];
             $kot['lines'] = $linesByKot[$kot['kot_id']] ?? [];
+            $kot['line_count'] = count($kot['lines']);
+
             $firedAt = strtotime((string) $kot['fired_at']) ?: $now;
-            $kot['waiting_minutes'] = (int) floor(($now - $firedAt) / 60);
+            // Postgres did the arithmetic where it could; the fallback is for a
+            // driver that hands the column back as a string.
+            $elapsed = isset($kot['elapsed_seconds']) ? (int) $kot['elapsed_seconds'] : $now - $firedAt;
+
+            $lateAfter = (int) ($kot['late_after_minutes'] ?? 15);
+            $targetSeconds = $lateAfter * 60;
+
+            // Once a ticket is READY the kitchen has done its part, so its clock
+            // stops at ready_at: leaving it running turns every ticket the floor
+            // is slow to collect into a kitchen failure.
+            $readyAt = isset($kot['ready_at']) ? strtotime((string) $kot['ready_at']) : false;
+            $prepSeconds = $readyAt === false ? $elapsed : max(0, $readyAt - $firedAt);
+
+            $kot['elapsed_seconds'] = max(0, $elapsed);
+            $kot['prep_seconds'] = $prepSeconds;
+            $kot['target_seconds'] = $targetSeconds;
+            $kot['late_after_minutes'] = $lateAfter;
+            $kot['waiting_minutes'] = (int) floor($prepSeconds / 60);
             // "Late" is the station's own threshold, not a global one: a bar
             // ticket is late after four minutes and a tandoor ticket is not.
-            $kot['is_late'] = $kot['waiting_minutes'] > (int) ($kot['late_after_minutes'] ?? 15);
+            $kot['is_late'] = $prepSeconds > $targetSeconds;
+            $kot['overdue_by_seconds'] = $kot['is_late'] ? $prepSeconds - $targetSeconds : 0;
+            $kot['order_kind'] = $kot['order_kind'] === null ? null : (string) $kot['order_kind'];
+            $kot['next_status'] = match ((string) $kot['status']) {
+                'NEW', 'ACCEPTED' => 'PREPARING',
+                'PREPARING'       => 'READY',
+                'READY'           => 'SERVED',
+                default           => null,
+            };
 
             return $kot;
         }, $kots);
+    }
+
+    /**
+     * The instant the outlet's trading day began, and the zone it is kept in.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function tradingDay(?int $locationId): array
+    {
+        $timezone = 'UTC';
+        $dayStartMinutes = 0;
+
+        if ($locationId !== null) {
+            $row = Db::first(
+                'SELECT trading_timezone, day_start_minutes FROM pos_location_profiles WHERE location_id = :id AND cmp_id = :cmp',
+                ['id' => $locationId, 'cmp' => $this->ctx->cmpId],
+            ) ?? [];
+
+            $candidate = is_string($row['trading_timezone'] ?? null) ? (string) $row['trading_timezone'] : '';
+            if ($candidate !== '' && in_array($candidate, \DateTimeZone::listIdentifiers(), true)) {
+                $timezone = $candidate;
+            }
+            $dayStartMinutes = max(0, min(23 * 60 + 59, (int) ($row['day_start_minutes'] ?? 0)));
+        }
+
+        $zone = new \DateTimeZone($timezone);
+        $now = new \DateTimeImmutable('now', $zone);
+        $start = $now->setTime(intdiv($dayStartMinutes, 60), $dayStartMinutes % 60, 0);
+        // Before the day's start minute, the trading day is still yesterday's.
+        if ($start > $now) {
+            $start = $start->modify('-1 day');
+        }
+
+        return [$timezone, $start->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s')];
     }
 
     public function find(int $kotId): array
