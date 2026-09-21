@@ -149,13 +149,29 @@ final class RestaurantController extends Controller
         Http::data((new KotService($ctx, $auth))->cancel((int) $id, Http::body()));
     }
 
+    /**
+     * Everything one kitchen screen needs, in one round trip.
+     *
+     * `kots` is unchanged and remains the live queue. What is added beside it
+     * is what a kitchen display cannot work without and should not have to ask
+     * three more times for: the tickets just served (so the pass can check
+     * what went out), what each station is carrying, and today's prep
+     * performance — all counted by PostgreSQL, none of it derived in a
+     * browser.
+     */
     public static function kitchenDisplay(): void
     {
         [$auth, $ctx] = self::enter();
+
+        $service = new KotService($ctx, $auth);
+        $stationId = Http::intParam('station_id');
+        $filters = ['location_id' => Http::intParam('location_id')];
+
         Http::data([
-            'kots' => (new KotService($ctx, $auth))->display(Http::intParam('station_id'), [
-                'location_id' => Http::intParam('location_id'),
-            ]),
+            'kots'     => $service->display($stationId, $filters),
+            'served'   => $service->servedRecently($stationId, $filters, Http::intParam('served_limit', 10) ?? 10),
+            'stations' => $service->stationLoad($filters),
+            'metrics'  => $service->metrics($stationId, $filters),
         ]);
     }
 

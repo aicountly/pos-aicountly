@@ -323,21 +323,91 @@ export interface KotLine {
   status: string
 }
 
+export type KotStatus = 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED'
+
+/**
+ * A kitchen ticket as the KDS endpoint returns it.
+ *
+ * Everything after `lines` is context the kitchen screen needs and the ticket
+ * itself does not own: the order kind and the customer belong to the cart, the
+ * table to the table session, the late threshold to the station. The API joins
+ * them so one screen is one round trip. They are optional because an older API
+ * build answers without them and the screen must still render.
+ */
 export interface Kot {
   kot_id: number
   kot_no: string
   kot_kind: 'new' | 'addon' | 'amend' | 'void'
   station_id: number | null
   station_name: string | null
+  station_code?: string | null
+  station_kind?: string | null
+  location_id?: number | null
+  location_name?: string | null
+  location_code?: string | null
   table_code: string | null
+  table_name?: string | null
+  covers?: number | null
   token_no: string | null
-  status: 'NEW' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED'
+  customer_name?: string | null
+  order_kind?: string | null
+  status: KotStatus
   priority: string
   fired_at: string
+  accepted_at?: string | null
+  ready_at?: string | null
+  served_at?: string | null
   notes: string | null
+  offline_created?: boolean
+  /** Fired → now, or fired → ready once the kitchen is done with it. */
   waiting_minutes?: number
   is_late?: boolean
+  /** Seconds since firing. Keeps running after READY; `prep_seconds` does not. */
+  elapsed_seconds?: number
+  /** Fired → ready, frozen the moment the ticket is ready. The kitchen's own time. */
+  prep_seconds?: number
+  /** This ticket's station threshold, in seconds. Not a global one. */
+  target_seconds?: number
+  late_after_minutes?: number
+  overdue_by_seconds?: number
+  line_count?: number
+  next_status?: KotStatus | null
   lines: KotLine[]
+}
+
+/** What one station is carrying right now. */
+export interface KdsStation {
+  station_id: number
+  station_code: string
+  station_name: string
+  station_kind: string
+  location_id: number
+  late_after_minutes: number
+  live: number
+  late: number
+}
+
+/**
+ * Today's kitchen performance, counted by the server over this POS's tickets.
+ *
+ * Null is a real answer: nothing finished yet is not the same as finished
+ * instantly, and an average over no tickets is not zero.
+ */
+export interface KdsMetrics {
+  completed: number
+  avg_prep_seconds: number | null
+  median_prep_seconds: number | null
+  on_time: number
+  on_time_pc: number | null
+  trading_day_start: string
+  timezone: string
+}
+
+export interface KdsDisplay {
+  kots: Kot[]
+  served?: Kot[]
+  stations?: KdsStation[]
+  metrics?: KdsMetrics | null
 }
 
 export interface PosReturn {

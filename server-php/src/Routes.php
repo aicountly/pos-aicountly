@@ -11,6 +11,7 @@ use Aicountly\Api\Controllers\ManageController;
 use Aicountly\Api\Controllers\RestaurantController;
 use Aicountly\Api\Controllers\ReturnsController;
 use Aicountly\Api\Controllers\SettingsController;
+use Aicountly\Api\Controllers\ShiftReportController;
 use Aicountly\Api\Controllers\TillController;
 
 /**
@@ -165,6 +166,12 @@ final class Routes
         $router->get('v1/dashboards/restaurant', [DashboardController::class, 'restaurant']);
         $router->get('v1/dashboards/customers', [DashboardController::class, 'customers']);
         $router->get('v1/dashboards/controls', [DashboardController::class, 'controls']);
+
+        // The Shift Report — one shift, in one response. The two lists that
+        // grow without limit are paged beside it and fetched on demand.
+        $router->get('v1/shift-report', [ShiftReportController::class, 'report']);
+        $router->get('v1/shift-report/events', [ShiftReportController::class, 'events']);
+        $router->get('v1/shift-report/risk', [ShiftReportController::class, 'risk']);
 
         // Drill-downs the boards link into. Paged server-side — a dashboard
         // that downloads the transaction history to count it is a dashboard

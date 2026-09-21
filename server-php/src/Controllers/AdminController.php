@@ -40,7 +40,11 @@ final class AdminController extends Controller
 
         $body = Http::body();
         $values = array_filter([
-            'bo_id'                   => isset($body['bo_id']) ? (int) $body['bo_id'] : null,
+            // self::id(), like every other reference here, so that bo_id = 0 —
+            // the "all branches" sentinel the company scope carries into every
+            // body — reads as "not supplied" instead of moving the outlet to a
+            // branch numbered zero.
+            'bo_id'                   => self::id($body['bo_id'] ?? null),
             'location_code'           => self::text($body['location_code'] ?? null),
             'display_name'            => self::text($body['display_name'] ?? null),
             'pos_mode'                => self::mode($body['pos_mode'] ?? null),
@@ -56,6 +60,18 @@ final class AdminController extends Controller
             if (array_key_exists($flag, $body)) {
                 $values[$flag] = (bool) $body[$flag];
             }
+        }
+
+        if (($values['location_code'] ?? null) !== null) {
+            self::assertCodeFree(
+                'pos_location_profiles',
+                'location_code',
+                'location_id',
+                (string) $values['location_code'],
+                $ctx->cmpId,
+                $id === null ? null : (int) $id,
+                'Another outlet already uses that code.',
+            );
         }
 
         if ($id === null) {
@@ -127,6 +143,18 @@ final class AdminController extends Controller
         }
         if (array_key_exists('is_active', $body)) {
             $values['is_active'] = (bool) $body['is_active'];
+        }
+
+        if (($values['terminal_code'] ?? null) !== null) {
+            self::assertCodeFree(
+                'pos_terminals',
+                'terminal_code',
+                'terminal_id',
+                (string) $values['terminal_code'],
+                $ctx->cmpId,
+                $id === null ? null : (int) $id,
+                'Another till already uses that code.',
+            );
         }
 
         if ($id === null) {
@@ -432,6 +460,39 @@ final class AdminController extends Controller
              WHERE a.cmp_id = :cmp ORDER BY p.profile_name, a.user_uuid',
             ['cmp' => $ctx->cmpId],
         )]);
+    }
+
+    /**
+     * Refuse a code another row in this company already holds.
+     *
+     * Both tables carry UNIQUE (cmp_id, <code>), so the database was already
+     * refusing this — but it refused with a PDOException, which the front
+     * controller reports as "The POS database is not reachable right now."
+     * That is true of a real outage and a lie about a typo, and it sends an
+     * administrator looking at the server when the answer is on their screen.
+     * The unique index stays: this is the readable message in front of it, not
+     * a replacement for it.
+     */
+    private static function assertCodeFree(
+        string $table,
+        string $codeColumn,
+        string $idColumn,
+        string $code,
+        int $cmpId,
+        ?int $ignoreId,
+        string $message,
+    ): void {
+        $sql = "SELECT {$idColumn} FROM {$table} WHERE cmp_id = :cmp AND {$codeColumn} = :code";
+        $params = ['cmp' => $cmpId, 'code' => $code];
+
+        if ($ignoreId !== null) {
+            $sql .= " AND {$idColumn} <> :self";
+            $params['self'] = $ignoreId;
+        }
+
+        if (Db::first($sql, $params) !== null) {
+            Http::conflict($message, ['field' => $codeColumn]);
+        }
     }
 
     private static function mode(mixed $raw): ?string
