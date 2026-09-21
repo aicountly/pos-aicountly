@@ -83,6 +83,7 @@ export default function Reports() {
   const [reconciling, setReconciling] = useState(false)
   const [toast, setToast] = useState<{ tone: 'success' | 'danger'; message: string } | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
+  const [fyLabel, setFyLabel] = useState<string | null>(null)
 
   const data = board.data
   const shift = data?.shift ?? null
@@ -109,7 +110,9 @@ export default function Reports() {
 
     fetchCompanyInfo(scope.cmp_id, controller.signal)
       .then((info) => {
-        if (!cancelled) setCompanyName(info.name)
+        if (cancelled) return
+        setCompanyName(info.name)
+        setFyLabel(info.fyList.find((fy) => fy.fyId === scope.fy_id)?.label ?? null)
       })
       .catch(() => {
         // The screen is complete without it; the printed header says "—".
@@ -119,7 +122,7 @@ export default function Reports() {
       cancelled = true
       controller.abort()
     }
-  }, [scope?.cmp_id])
+  }, [scope?.cmp_id, scope?.fy_id])
 
   /** The link to THIS shift, with every filter in it. */
   const permalink = useMemo(() => {
@@ -230,7 +233,7 @@ export default function Reports() {
           <h2 style={{ margin: '0 0 6px', fontSize: 16 }}>Shift report</h2>
           <p style={{ margin: 0, fontSize: 11, lineHeight: 1.7 }}>
             <strong>{companyName ?? '—'}</strong>
-            {scope ? ` · FY ${scope.fy_id}` : ''}
+            {fyLabel ? ` · ${fyLabel}` : ''}
             <br />
             Outlet: {shift?.outlet.name ?? '—'} · Till: {shift ? `${shift.terminal.code} • ${shift.terminal.name}` : '—'}
             <br />
