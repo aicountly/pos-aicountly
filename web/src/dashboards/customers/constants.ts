@@ -60,13 +60,6 @@ export const CUSTOMER_SORTS: Array<{ id: string; label: string }> = [
   { id: 'name', label: 'Name' },
 ]
 
-/** How the segment wedges are coloured, keyed by the server's segment key. */
-export const SEGMENT_TONE: Record<string, 'brand' | 'brand-soft' | 'info' | 'warning' | 'accent' | 'muted'> = {
-  loyal: 'brand',
-  at_risk: 'warning',
-  one_time: 'muted',
-}
-
 /** What "By revenue / by customers" measures a segment or an outlet by. */
 export type SegmentMode = 'revenue' | 'customers'
 export type OutletMetric = 'customers' | 'repeat' | 'revenue'

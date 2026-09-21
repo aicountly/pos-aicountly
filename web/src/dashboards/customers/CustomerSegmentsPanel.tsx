@@ -5,17 +5,20 @@
  * suggestions panel reasons about, counted by the same SQL, so a segment total
  * here and a follow-up below cannot disagree.
  *
+ * The ring is the shared DonutChart the tender mix uses. It was tempting to
+ * write a second one for this panel; a product with two donuts drifts into
+ * having two of everything, and the only thing this one needed that the shared
+ * one lacked was a word in the legend's first column.
+ *
  * Switching between revenue and customers changes what the ring measures, not
- * which segments exist. A segment with no spend still appears in the legend
- * with a zero rather than vanishing, because "nobody in this segment bought
- * anything" is worth seeing.
+ * which segments exist.
  */
 
 import { DonutChart } from '../charts'
 import { compactMoney, count, money, percent } from '../format'
 import { Panel, Unavailable } from '../shell'
 import type { CustomersBoard } from '../types'
-import { SEGMENT_TONE, type SegmentMode } from './constants'
+import type { SegmentMode } from './constants'
 
 export function CustomerSegmentsPanel({
   board,
@@ -28,8 +31,6 @@ export function CustomerSegmentsPanel({
 }) {
   const { segments } = board
   const byRevenue = mode === 'revenue'
-
-  const totalSpend = segments.segments.reduce((sum, segment) => sum + segment.spend, 0)
 
   return (
     <Panel
@@ -56,11 +57,13 @@ export function CustomerSegmentsPanel({
             label: segment.label,
             value: byRevenue ? segment.spend : segment.customers,
             note: segment.definition,
-            tone: SEGMENT_TONE[segment.key] ?? 'info',
           }))}
+          // money, not compactMoney: the legend is a real table, and a
+          // shortened figure in a table is what compactMoney exists not to be.
           format={(v) => (byRevenue ? money(v) : `${count(v)} customer${v === 1 ? '' : 's'}`)}
-          centerValue={byRevenue ? compactMoney(totalSpend) : count(segments.total)}
-          centerLabel={byRevenue ? 'Spend on this POS' : 'Identified customers'}
+          centreFormat={byRevenue ? compactMoney : count}
+          centreLabel={byRevenue ? 'Spend on this POS' : 'Identified customers'}
+          labelHeader="Segment"
           caption={byRevenue ? 'Spend on this POS by segment' : 'Identified customers by segment'}
           emptyLabel={
             byRevenue

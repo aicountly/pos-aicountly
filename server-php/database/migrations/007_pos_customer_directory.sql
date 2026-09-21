@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- 005 — the read path behind the Customers & Growth roster
+-- 007 — the read path behind the Customers & Growth roster
 --
 -- One index, no new table, no new column. The customer roster is derived from
 -- pos_carts every time it is asked for, because the alternative — a

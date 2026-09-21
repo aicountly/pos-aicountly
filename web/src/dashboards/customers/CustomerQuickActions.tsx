@@ -26,7 +26,7 @@ export function CustomerQuickActions({
   const actions = [
     {
       id: 'till',
-      to: '/',
+      to: '/till',
       tone: 'brand',
       icon: <UserPlus size={17} strokeWidth={2} />,
       title: 'Attach a customer',

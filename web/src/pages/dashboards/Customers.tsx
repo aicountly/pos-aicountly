@@ -127,7 +127,7 @@ export default function Customers() {
       visibleTabs={tabs}
       filterControls={<DashboardFilterBar filters={filters} update={update} showTerminal={false} />}
       freshnessLabel={<Freshness at={board.fetchedAt} refreshing={board.refreshing} />}
-      primaryAction={{ label: 'Open POS', to: '/' }}
+      primaryAction={{ label: 'Open POS', to: '/till' }}
       onRefresh={refresh}
       refreshing={board.refreshing}
       metrics={[]}
@@ -189,7 +189,7 @@ export default function Customers() {
                 Show every outlet
               </button>
             )}
-            <Link className="pos-button pos-button--primary" to="/">
+            <Link className="pos-button pos-button--primary" to="/till">
               Open the till
             </Link>
           </>

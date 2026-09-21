@@ -186,6 +186,19 @@
  */
 .cg-analytics__trend .pos-chart svg { max-height: 320px; }
 
+/*
+ * The shared donut, in a third-width panel.
+ *
+ * It lays the ring and its legend side by side, which is right in a wide
+ * tender-mix card and wrong here: at about 460px the legend's first column
+ * drops to roughly 90px and a segment's definition breaks one word per line.
+ * Stacked, the legend gets the full width and reads as a sentence. Scoped to
+ * this panel so the tender mix keeps the layout it was designed for.
+ */
+.cg-analytics__segments .pos-donut { flex-direction: column; }
+.cg-analytics__segments .pos-donut__ring { flex: 0 0 auto; width: 100%; }
+.cg-analytics__segments .pos-donut .pos-table-wrap { flex: 0 0 auto; width: 100%; }
+
 /* --------------------------------------------------------------------------
    Outlet bars
    -------------------------------------------------------------------------- */

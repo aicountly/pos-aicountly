@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CreditCard, Loader2, Lock, Pause, Play, Search, Trash2, Wallet, X } from 'lucide-react'
 import { usePos } from '../context/PosContext'
 import { api, ApiError } from '../services/api'
@@ -7,6 +7,24 @@ import type { Cart, CatalogItem, PaymentMode, RegisterSession } from '../service
 import { cacheGet, cachePut, deviceUuid, outboxAdd, type OutboxSale } from '../offline/db'
 import { Button, Card, Field, Input, Notice, Select, money } from '../ui'
 import { CommandStrip } from '../components/CommandStrip'
+
+/**
+ * The kinds of order this till can start.
+ *
+ * `order_kind` is a real column the API already validates, and a takeaway is
+ * the same sale with a different label on it — so the quick actions on the
+ * restaurant board deep-link here with ?order_kind=takeaway rather than a
+ * second checkout screen existing. Anything unrecognised falls back to a
+ * counter sale; a URL is a claim, not an instruction.
+ */
+const ORDER_KINDS = {
+  retail: 'Counter sale',
+  takeaway: 'Takeaway',
+  delivery: 'Delivery',
+  quick_service: 'Quick service',
+} as const
+
+type TillOrderKind = keyof typeof ORDER_KINDS
 
 const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -20,7 +38,6 @@ const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
 
 export default function Till() {
   const { terminalId, terminal, can, session: posSession } = usePos()
-
   const [shift, setShift] = useState<RegisterSession | null>(null)
   const [cart, setCart] = useState<Cart | null>(null)
   const [held, setHeld] = useState<Cart[]>([])
@@ -30,6 +47,75 @@ export default function Till() {
   const [offline, setOffline] = useState(() => !navigator.onLine)
 
   const scanRef = useRef<HTMLInputElement | null>(null)
+
+  // ------------------------------------------------------------------
+  // A bill opened from somewhere else
+  // ------------------------------------------------------------------
+  //
+  // The floor screen sends the cashier here with ?cart=<id> when a waiter picks
+  // View order or Add items on a table. The till loads THAT bill rather than
+  // starting a second one beside it, which is how a table ends up with two
+  // bills and one of them uncollected.
+
+  const [params, setParams] = useSearchParams()
+  const requestedCart = Number(params.get('cart') ?? '')
+
+  // ?order_kind= is how the restaurant board's Takeaway and Delivery actions
+  // start the right kind of order through this till rather than through a
+  // second checkout screen. A URL is a claim, so anything unrecognised falls
+  // back to a counter sale.
+  const orderKind = useMemo<TillOrderKind>(() => {
+    const raw = params.get('order_kind')
+
+    return raw !== null && raw in ORDER_KINDS ? (raw as TillOrderKind) : 'retail'
+  }, [params])
+
+  useEffect(() => {
+    if (!Number.isInteger(requestedCart) || requestedCart <= 0) return
+    if (cart?.cart_id === requestedCart) return
+
+    let cancelled = false
+
+    void (async () => {
+      setBusy(true)
+      setError(null)
+      try {
+        const found = (await api.one<Cart>(`v1/carts/${requestedCart}`)).data
+        if (cancelled) return
+
+        if (found.status === 'COMPLETED' || found.status === 'VOID') {
+          setNotice(`That order is already ${found.status.toLowerCase()}, so there is nothing to work on.`)
+          return
+        }
+
+        // A held bill has to be resumed before it can be added to; an open one
+        // is already live and is picked up as it stands.
+        const opened =
+          found.status === 'HELD' ? (await api.post<Cart>(`v1/carts/${found.cart_id}/resume`, {})).data : found
+
+        if (cancelled) return
+        setCart(opened)
+        setNotice(null)
+        await loadHeld()
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not open that order.')
+      } finally {
+        if (!cancelled) {
+          setBusy(false)
+          // Consumed, so a refresh does not re-open it over whatever the
+          // cashier has moved on to.
+          setParams({}, { replace: true })
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+    // cart is read but deliberately not a dependency: this runs for the id in
+    // the URL, not every time the cart it loaded changes underneath it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedCart])
 
   // ------------------------------------------------------------------
   // Shift
@@ -99,11 +185,11 @@ export default function Till() {
     const response = await api.post<Cart>('v1/carts', {
       terminal_id: terminalId,
       session_id: shift?.session_id ?? null,
-      order_kind: 'retail',
+      order_kind: orderKind,
     })
     setCart(response.data)
     return response.data
-  }, [cart, terminalId, shift])
+  }, [cart, terminalId, shift, orderKind])
 
   const addItem = async (item: CatalogItem, quantity = 1) => {
     setBusy(true)
@@ -213,14 +299,18 @@ export default function Till() {
     // on the screen, which is exactly what a freshly set-up company sees.
     const noTillsExist = (posSession?.terminals.length ?? 0) === 0
 
+    // The onboarding itself lives on the home screen, which has the room for
+    // it and the state to decide what the next step actually is. This is the
+    // guard for someone who arrived at /till directly, and it points there
+    // rather than repeating the same explanation in a second place.
     if (noTillsExist) {
       return (
         <Notice tone="info" title="No till has been set up yet">
-          A till is the counter this browser is standing at — the drawer, the shift and the receipts are all recorded
-          against one, so selling cannot start until there is one.{' '}
+          A sale is recorded against a till, so there is nothing to sell from yet.{' '}
           {can('terminal.manage') ? (
             <>
-              Create an outlet and its first till in <Link to="/setup">Setup</Link>.
+              Create an outlet and its first till in <Link to="/setup">Setup</Link>, or start from the{' '}
+              <Link to="/">home screen</Link>.
             </>
           ) : (
             <>Ask whoever administers POS to add one in Setup.</>
@@ -231,8 +321,8 @@ export default function Till() {
 
     return (
       <Notice tone="info" title="Which till is this?">
-        Choose the till at the top of the page. Everything a till does — the drawer, the shift, the receipts — is
-        recorded against it, so it has to be picked before selling.
+        Choose the till at the top of the page, or pick one on the <Link to="/">home screen</Link>. Everything a till
+        does — the drawer, the shift, the receipts — is recorded against it, so it has to be picked before selling.
       </Notice>
     )
   }
@@ -255,7 +345,15 @@ export default function Till() {
 
         <Scanner inputRef={scanRef} onPick={addItem} offline={offline} />
 
-        <Card title="On the counter" subtitle={cart?.token_no ? `Token ${cart.token_no}` : undefined}>
+        <Card
+          title="On the counter"
+          subtitle={[
+            ORDER_KINDS[(cart?.order_kind ?? orderKind) as TillOrderKind] ?? ORDER_KINDS[orderKind],
+            cart?.token_no ? `Token ${cart.token_no}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        >
           {!cart || cart.lines.length === 0 ? (
             <p style={{ color: 'var(--muted)', margin: 0 }}>Scan or search for the first item.</p>
           ) : (
