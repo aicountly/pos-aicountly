@@ -63,7 +63,7 @@ final class Window
         $locationId = self::resolveLocation($ctx);
         [$timezone, $dayStart] = self::outletCalendar($ctx, $locationId);
 
-        $today = self::businessToday($timezone, $dayStart);
+        $today = self::businessTodayIn($timezone, $dayStart);
         $from  = self::date(Http::param('from'), $today);
         $to    = self::date(Http::param('to'), $from);
 
@@ -77,8 +77,8 @@ final class Window
             );
         }
 
-        $startsAt = self::instant($from, $timezone, $dayStart);
-        $endsAt   = self::instant(self::addDays($to, 1), $timezone, $dayStart);
+        $startsAt = self::instantAt($from, $timezone, $dayStart);
+        $endsAt   = self::instantAt(self::plusDays($to, 1), $timezone, $dayStart);
 
         [$compareStart, $compareEnd, $compareLabel] = self::comparison($from, $to, $timezone, $dayStart);
 
@@ -222,6 +222,11 @@ final class Window
 
     // -----------------------------------------------------------------------
     // Resolution
+    //
+    // The outlet calendar and the three date helpers under it are public
+    // because the Shift Report asks the same question about the same
+    // boundary. Two implementations of "which business day is this" is two
+    // chances for a night shift to land on different days on two screens.
     // -----------------------------------------------------------------------
 
     private static function resolveLocation(Context $ctx): ?int
@@ -289,7 +294,7 @@ final class Window
      *
      * @return array{0:string, 1:int}
      */
-    private static function outletCalendar(Context $ctx, ?int $locationId): array
+    public static function outletCalendar(Context $ctx, ?int $locationId): array
     {
         if ($locationId === null) {
             return ['UTC', 0];
@@ -311,7 +316,7 @@ final class Window
     }
 
     /** Today, in the outlet's own calendar, allowing for a day that starts at 6am. */
-    private static function businessToday(string $timezone, int $dayStartMinutes): string
+    public static function businessTodayIn(string $timezone, int $dayStartMinutes): string
     {
         $now = new \DateTimeImmutable('now', new \DateTimeZone($timezone));
         $minutes = ((int) $now->format('H')) * 60 + (int) $now->format('i');
@@ -322,7 +327,7 @@ final class Window
     }
 
     /** The UTC instant a business date begins at. */
-    private static function instant(string $date, string $timezone, int $dayStartMinutes): string
+    public static function instantAt(string $date, string $timezone, int $dayStartMinutes): string
     {
         $local = new \DateTimeImmutable($date . ' 00:00:00', new \DateTimeZone($timezone));
 
@@ -352,20 +357,20 @@ final class Window
         $days = self::spanDays($from, $to);
 
         if ($mode === 'same_weekday' || $mode === 'last_week') {
-            $start = self::addDays($from, -7);
-            $end   = self::addDays($to, -7);
+            $start = self::plusDays($from, -7);
+            $end   = self::plusDays($to, -7);
             $label = $days === 1 ? 'vs the same day last week' : 'vs the same days last week';
         } elseif ($mode === 'previous') {
-            $start = self::addDays($from, -$days);
-            $end   = self::addDays($to, -$days);
+            $start = self::plusDays($from, -$days);
+            $end   = self::plusDays($to, -$days);
             $label = $days === 1 ? 'vs the day before' : 'vs the previous ' . $days . ' days';
         } else {
             return [null, null, null];
         }
 
         return [
-            self::instant($start, $timezone, $dayStart),
-            self::instant(self::addDays($end, 1), $timezone, $dayStart),
+            self::instantAt($start, $timezone, $dayStart),
+            self::instantAt(self::plusDays($end, 1), $timezone, $dayStart),
             $label,
         ];
     }
@@ -387,7 +392,7 @@ final class Window
         return $raw;
     }
 
-    private static function addDays(string $date, int $days): string
+    public static function plusDays(string $date, int $days): string
     {
         return (new \DateTimeImmutable($date, new \DateTimeZone('UTC')))
             ->modify(($days >= 0 ? '+' : '') . $days . ' days')
