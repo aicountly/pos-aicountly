@@ -141,13 +141,15 @@ export function useBoard<T>(
   query: QueryParams,
   enabled = true,
   /**
-   * Poll this often, in milliseconds. Zero means never.
+   * Re-fetch on this interval, in milliseconds. 0 is off, which is the default
+   * and what four of the five boards want.
    *
-   * Only the operational boards ask for this, and only while the tab is
-   * VISIBLE: a counter screen left open on a back tab overnight would
-   * otherwise make three thousand requests nobody reads. A hidden tab polls
-   * nothing and refetches once when it comes back, which is the behaviour a
-   * manager expects anyway — they want what is true now, not the backlog.
+   * This reuses the existing fetch rather than adding a second live-data
+   * mechanism: there is no socket and no event bus in this product, and
+   * introducing one for a single board would leave two ways for the same screen
+   * to be wrong. The interval is deliberately slow — a restaurant floor changes
+   * over minutes, and a till on shop broadband should not be asked more often
+   * than a person would press Refresh.
    */
   refreshMs = 0,
 ): BoardState<T> {
@@ -218,40 +220,22 @@ export function useBoard<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, queryKey, scopeKey, token, enabled])
 
+  // Polling, paused while the tab is in the background: a screen nobody is
+  // looking at does not need a fresher copy, and a till left open overnight
+  // should not spend the night asking.
   useEffect(() => {
     if (!enabled || refreshMs <= 0) return
 
-    let timer = 0
-
-    const stop = () => {
-      if (timer !== 0) {
-        window.clearInterval(timer)
-        timer = 0
-      }
+    const tick = () => {
+      if (!document.hidden) refresh()
     }
 
-    const start = () => {
-      stop()
-      timer = window.setInterval(refresh, refreshMs)
-    }
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        // One immediate catch-up, then the normal cadence. Coming back to a
-        // stale counter board is worse than one extra request.
-        refresh()
-        start()
-      } else {
-        stop()
-      }
-    }
-
-    if (document.visibilityState === 'visible') start()
-    document.addEventListener('visibilitychange', onVisibility)
+    const id = window.setInterval(tick, refreshMs)
+    document.addEventListener('visibilitychange', tick)
 
     return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVisibility)
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', tick)
     }
   }, [enabled, refreshMs, refresh])
 

@@ -10,7 +10,7 @@
 
 import { Check, Circle, Minus } from 'lucide-react'
 import { count, percent } from '../../format'
-import { ContextualEmpty, Panel } from '../../shell'
+import { EmptyState, Panel } from '../../shell'
 import type { RetailBoard, RetailReadinessCheck } from '../../types'
 
 function Mark({ check }: { check: RetailReadinessCheck }) {
@@ -64,9 +64,9 @@ export function ShiftReadiness({ board }: { board: RetailBoard }) {
   return (
     <Panel title="Shift readiness">
       {!readiness.available ? (
-        <ContextualEmpty title="No active shifts">
+        <EmptyState title="No active shifts">
           {readiness.note} Open a till shift to begin retail operations.
-        </ContextualEmpty>
+        </EmptyState>
       ) : (
         <>
           <div className="pos-readiness">

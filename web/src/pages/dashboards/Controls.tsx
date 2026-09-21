@@ -73,7 +73,7 @@ export default function Controls() {
   const primaryAction = myShift
     ? { label: 'Close the shift', to: '/reports' }
     : can('shift.open')
-      ? { label: 'Open a till', to: '/' }
+      ? { label: 'Open a till', to: '/till' }
       : null
 
   return (

@@ -31,6 +31,10 @@ export interface InsightItem {
   period_label: string
   evidence_href?: string | null
   action_label?: string | null
+  /** The one short figure the strip shows. Absent on boards that send none. */
+  metric?: string | null
+  /** The line under it. Same numbers as `explanation`, fewer words. */
+  detail?: string | null
 }
 
 export interface InsightBlock {
@@ -45,6 +49,18 @@ export interface InsightBlock {
   ai: { available: boolean; reason: string; note: string }
   generated_at: string
   sufficient_data?: boolean
+  /** What the strip counted over, for its "based on…" line. */
+  context?: { outlets: number; bills: number; items: number }
+}
+
+export interface ReturnVoidReason {
+  kind: 'return' | 'void'
+  reason: string
+  display_name: string
+  count: number
+  amount: number
+  /** False on a void: the figure sizes the bill, it is not money that moved. */
+  amount_is_money: boolean
 }
 
 export interface TenderLine {
@@ -70,15 +86,25 @@ export interface OverviewBoard {
     discount: number
     estimated_tax: number
     average_bill: number
+    /** Completed bills carrying any discount. The denominator is `bills`. */
+    discounted_bills: number
     returns_count: number
     returns_value: number
     active_tills: number
     open_shifts: number
   }
-  comparison: { label: string | null; bills: number; net: number; average_bill: number } | null
+  comparison: {
+    label: string | null
+    bills: number
+    net: number
+    average_bill: number
+    discounted_bills: number
+    returns_count: number
+    returns_value: number
+  } | null
   series: {
     bucket: 'hour' | 'day'
-    points: Array<{ bucket: string; bills: number; net: number }>
+    points: Array<{ bucket: string; bills: number; net: number; returns: number }>
     comparison_by_bucket: Record<string, number> | null
   }
   outlets: Array<{
@@ -101,6 +127,30 @@ export interface OverviewBoard {
     amount: number
     returned_qty: number
   }>
+  /**
+   * Why money went back, split by what actually happened.
+   *
+   * A return moved goods and raised a credit; a void cancelled a bill that was
+   * never taken. `amount_is_money` is false on a void row for exactly that
+   * reason, and the screen must not total the two columns together.
+   */
+  returns_voids: {
+    returns: ReturnVoidReason[]
+    voids: ReturnVoidReason[]
+    totals: {
+      returns_count: number
+      returns_value: number
+      voids_count: number
+      voids_value: number
+    }
+    note: string
+  }
+  /** Business day of week (1 = Monday) against wall-clock hour in the outlet's timezone. */
+  activity: {
+    cells: Array<{ dow: number; hour: number; bills: number; net: number }>
+    timezone: string
+    basis: string
+  }
   margin:
     | { available: false; reason: string; note: string }
     | {
@@ -389,6 +439,42 @@ export interface KitchenTicket {
   next_status: string | null
 }
 
+/**
+ * Where an order has got to, derived by the server from the order's own
+ * tickets. Not a stored column: there is nothing here to go stale against
+ * pos_kots.
+ */
+export type RestaurantOrderState =
+  | 'seated'
+  | 'placed'
+  | 'in_kitchen'
+  | 'ready'
+  | 'served'
+  | 'delayed'
+  | 'paid'
+  | 'cancelled'
+
+export interface RestaurantOrderSummary {
+  cart_id: number
+  cart_uuid: string
+  /** The token the counter calls out, or #<id> when the till issued none. */
+  reference: string
+  order_kind: string
+  table_code: string | null
+  table_session_id: number | null
+  customer_name: string | null
+  item_count: number
+  total_amount: number
+  cart_status: string
+  state: RestaurantOrderState
+  late: boolean
+  tickets: number
+  created_at: string
+  elapsed_seconds: number
+  /** Two different clocks: how long it has been running, or how long it took. */
+  elapsed_basis: 'running' | 'took'
+}
+
 export interface RestaurantBoard {
   window: WindowMeta
   kpis: {
@@ -399,9 +485,57 @@ export interface RestaurantBoard {
     tickets_pending: number
     tickets_overdue: number
     orders_ready: number
+    tickets_served: number
     unsettled_bills: number
     unsettled_value: number
   }
+  /**
+   * Whether the restaurant is serving, read from the tills rather than from a
+   * switch: POS has no open/closed control, so `changeable` is false and the
+   * screen renders a state rather than a button that would do nothing.
+   */
+  service: {
+    state: 'open' | 'closed'
+    label: string
+    open_shifts: number
+    since: string | null
+    changeable: boolean
+    note: string
+  }
+  flow: {
+    stages: Array<{
+      key: 'received' | 'in_kitchen' | 'ready' | 'served'
+      label: string
+      count: number
+      /** `live` is a state a ticket rests in now; `window` is an event inside the period. */
+      basis: 'live' | 'window'
+    }>
+    overdue: number
+    note: string
+  }
+  sales: {
+    orders: number
+    net: number
+    average_order: number | null
+    previous: { label: string; orders: number; net: number }
+    /** Null when the preceding period took nothing — "up ∞%" is not a fact. */
+    change_pc: number | null
+    basis: string
+  }
+  serve: {
+    /** False when no ticket was marked served: a gap, not a zero. */
+    available: boolean
+    reason: string | null
+    average_seconds: number | null
+    sampled: number
+    previous: { label: string; average_seconds: number | null; sampled: number }
+    change_pc: number | null
+    basis: string
+    note: string
+  }
+  /** POS collects no guest feedback. Always unavailable, never a score. */
+  rating: { available: false; reason: string; note: string; contract_gap: string }
+  orders: { items: RestaurantOrderSummary[]; note: string }
   floors: Array<{
     floor_id: number
     floor_code: string
@@ -459,6 +593,19 @@ export interface RestaurantBoard {
       late_after_seconds: number
       overdue_by_seconds: number
     }>
+  }
+  /**
+   * How much of the restaurant module exists at all.
+   *
+   * "This restaurant is quiet" and "no restaurant has been set up here" are the
+   * same zeroes and entirely different problems, and `configured` is what tells
+   * them apart.
+   */
+  setup: {
+    configured: boolean
+    steps: Array<{ key: string; label: string; count: number; done: boolean }>
+    done: number
+    total: number
   }
 }
 

@@ -1,4 +1,38 @@
-# The five POS dashboards
+# The home screen and the five POS dashboards
+
+## The home screen
+
+`/` is not a sixth board. It is the operational home: whether this counter can
+sell, what is in the way, and what the shop took today — in that order.
+
+It adds **no endpoint**. It asks `v1/dashboards/overview` (when the person has
+`reports.view`) and `v1/dashboards/retail` (`reports.view` or `sell`), joins
+them to `v1/session`, this till's `v1/shifts/current`, unsettled rows from
+`v1/returns` and this device's own outbox, and composes the result in
+`web/src/home/model.ts`. A second definition of "today's takings" would be one
+more thing to keep in step with this one.
+
+Permissions are respected by not asking. A person without `reports.view` is not
+shown a zero where the shop's takings would be; the board is not requested and
+the card says the figure is not theirs. A cashier with `sell` gets the retail
+board's figures, which the server has already narrowed to their own counters,
+and the card says so.
+
+What it will not claim, for the same reasons the boards will not:
+
+* **System Health is not a device monitor.** The connection and the outbox are
+  live because the browser owns them. The printer, the drawer and the kitchen
+  rows report what the till is *configured* with and say so; the payments row
+  reads "Recorded only", never "Operational", because POS integrates no
+  provider. Where a check could not be read at all the summary says "Some
+  checks unavailable" rather than "All systems operational".
+* **The Aicountly AI card is rule-based.** Every item is a threshold crossing
+  over POS' own rows and carries a "Rule-based" tag, and the card's foot says no
+  model is connected. There is no predicted footfall, no suggested staffing and
+  no trending product, because nothing in this product observes or forecasts
+  those. Server-side items arrive through the same list when they exist.
+
+## The five dashboards
 
 Five boards, one shell. Each is a real question a shop asks, and each is built
 from a separate endpoint that enforces its own permission and scopes its own
@@ -50,6 +84,19 @@ the sender was looking at.
 | `terminal_id` | One till. Rejected when it is not in the chosen outlet. |
 | `session_id` | One shift. |
 | `compare` | `previous`, `same_weekday`, or absent for no comparison. |
+
+The filter bar offers four quick ranges (Today, Last 7 days, Last 30 days, This
+month) and two comparisons. Two, not the seven a designer might list, because
+`Window::comparison` builds two — a longer menu would be a menu of windows
+nothing behind the screen knows how to compute.
+
+One request backs a whole board. Every panel reads the same response, so no two
+panels can disagree, there is no waterfall of spinners, and a refresh is one
+round trip. On Business Overview the aggregates each panel shares are memoised
+per request (`OverviewBoard::once`), because the briefing rules read the panels
+back — peak hour reads the series, the returns rule reads the reason breakdown,
+the counter rule reads the till totals — and without it each of those re-ran its
+own query.
 
 ## The business date is not UTC midnight
 
@@ -134,6 +181,127 @@ silently inheriting one of the two.
 A drawer nobody has counted has `counted_cash: null` and `variance: null`. The
 screen renders "Not counted yet", never a zero.
 
+### Returns and voids are two things
+
+They share a panel on Business Overview because a manager asks about them in one
+breath. They keep separate counts, separate values and separate `kind`s because
+they are not the same event:
+
+| | Return | Void |
+|---|---|---|
+| What happened | Goods came back, a credit was raised | A bill was cancelled before it was ever taken |
+| Money moved | Yes | No |
+| Valued at | `pos_returns.refund_amount` | The cart total the bill would have been |
+| `amount_is_money` | `true` | `false` |
+
+Totalling the two columns produces a refund figure that reconciles against
+nothing, which is why the API sends them as two lists with two subtotals and the
+screen never adds them.
+
+### The heatmap reads two clocks
+
+`activity.cells` is keyed by ISO day-of-week and hour. The **hour** is the
+wall-clock hour in the outlet's timezone, because "when is the lunch rush" is a
+question about the clock on the wall. The **day** is the *business* day, shifted
+by `day_start_minutes`, so a bar's 1am Saturday takings sit on Friday's row —
+the same day they sit on everywhere else on the board.
+
+Cells arrive hourly and unbinned. The screen bins them into the columns it has
+room for; binning in the API would fix the shape of a picture in the contract.
+
+### Returns are scoped like sales
+
+`pos_returns` carries `terminal_id`, so an outlet or till filter narrows refunds
+exactly as it narrows sales. Before this, the Returns card answered for the whole
+company while every figure beside it answered for one outlet, and the two were
+read as one story.
+
+## Restaurant Operations: live figures and windowed ones
+
+This board is the only one of the five that is a **live operations screen**
+rather than a report, and it mixes two kinds of figure. Both are labelled on
+screen, because a board that mixed them silently would let a manager filter to
+last Tuesday and conclude the kitchen was empty.
+
+| Live — ignores `from`/`to` | Windowed by `from`/`to` |
+|---|---|
+| Tables occupied, covers, table states | Today's sales, and the order count behind it |
+| Active orders, and the value unsettled on the floor | Average serve time, and its sample size |
+| Tickets received, in the kitchen, ready, running late | Tickets served |
+| Orders on the board that are still open | Orders on the board that are settled |
+
+An order on the floor is open until somebody settles it, whatever date is in the
+filter, so the open ones are always listed. The rule is stated in the panel note
+rather than left to be discovered.
+
+**Average serve time** is `AVG(pos_kots.served_at - fired_at)` over tickets
+marked served inside the window, on this POS. Tickets the kitchen never marked
+are not in it, which is why the sample size sits beside the figure and why
+`available: false` — not a zero — is returned when nothing was marked at all.
+
+**Both comparisons on this board are computed server-side against the window of
+the same length immediately before**, independent of the `compare` filter, which
+this board does not offer. `change_pc` is null when the preceding window took
+nothing: dividing by zero produces Infinity, and "up ∞%" is not a fact about a
+restaurant. Serve time is coloured by *meaning* rather than by direction — a
+fall is good news and is green, while the arrow still points the way the figure
+moved.
+
+**The board re-asks every 45 seconds**, paused while the tab is in the
+background. That reuses the existing board fetch (`useBoard`'s `refreshMs`); POS
+has no socket and no event bus, and adding one for a single screen would leave
+two ways for it to be wrong.
+
+**The order state in the list is derived, not stored.** It is read from the
+order's own tickets — late beats everything, then in the kitchen, then ready,
+then served — so there is no second column to go stale against `pos_kots`.
+
+**The suggestion strip is rule-based**, on the same terms as Business
+Overview's — see *The briefing strip is rule-based, and says so* below. It
+differs only in where the rules run: Overview computes its items in SQL, and
+this board's are computed in the browser by
+`getRestaurantOperationalInsight(metrics)` in
+`web/src/dashboards/restaurantInsight.ts`, because they read figures four
+panels have already been handed. That function is the seam an intelligence
+endpoint replaces, and its items would arrive with `kind: 'ai'` and badge
+themselves. It must not relabel the rules.
+
+**"No restaurant set up here" is not "the restaurant is quiet".** `setup.configured`
+tells them apart, and the board draws a getting-started checklist for the first
+and an empty service for the second. The checklist counts real rows — outlets,
+floors, tables, stations, menu items, open shifts — so a shop halfway through
+can see where it stopped. No KPI row is drawn at all when nothing is configured.
+
+## The briefing strip is rule-based, and says so
+
+The panel on Business Overview is headed **Aicountly AI Insights** because that
+is the surface a model will eventually publish to. POS has no model integration,
+so today every item on it is a threshold crossing computed in SQL from POS' own
+rows — a count, a ratio, a comparison against the window the person chose.
+
+Three things keep that honest and all three are load-bearing:
+
+- the panel carries a **BETA** badge;
+- every card inside the drawer is badged **Rule-based alert**, from
+  `InsightItem.kind`, not from the panel;
+- the drawer closes with the server's own `insights.ai.note` saying no model
+  produced any of it.
+
+When a model does publish here its items arrive with `kind: 'ai'` and badge
+themselves differently. The badge is on the item and never on the panel, for
+exactly that reason.
+
+Restaurant Operations carries the same arrangement under the heading **Aicountly
+AI Suggests**: a BETA badge on the strip, `Rule-based alert` on the item, and one
+rule engine behind it that a model would replace rather than relabel.
+
+Rules only fire when the numbers behind them exist. There is no "no data" card
+and no rounded-up encouragement: a quiet shop gets a short strip, which is the
+honest shape of a quiet shop. Each item carries a `metric` and a `detail` — the
+two short lines the strip shows — alongside the `title` and `explanation` the
+drawer shows, and both are built from the same figures so the summary can never
+disagree with the detail.
+
 ## Retail Operations, panel by panel
 
 One request — `GET v1/dashboards/retail` — returns the whole board, so every
@@ -145,27 +313,27 @@ hand.
 | Block | Panel | Built from |
 |---|---|---|
 | `kpis` | the five metric cards | `pos_carts`, `pos_terminals`, `pos_register_sessions` |
-| `comparison` | the trend badges on those cards | the same aggregates over the comparison window |
+| `comparison` | the movement on those cards | the same aggregates over the comparison window |
 | `trend` | Hourly sales trend | completed carts bucketed by hour (one day) or day (a range), in the outlet's timezone |
 | `counters` | Live counter status | one row per active till, with its shift, its open carts and its rate |
 | `checkout_health` | Queue & checkout health | see the queue gap below |
 | `categories` | Top selling categories | POS menu categories, then Inventory's item groups for the rest |
 | `alerts` | Operational alerts | posting, offline, drawer variances, aging holds, void rate, quiet tills, Inventory's answer |
 | `readiness` | Shift readiness | shifts open, opening floats, printers configured, devices registered, drawers awaiting sign-off |
-| `pulse` | Operations pulse | the two worst alerts, the sales swing, the usual busiest hour |
+| `pulse` | the briefing strip | the two worst alerts, the sales swing, the usual busiest hour |
 
-**Trend badges are coloured by intent, not by direction.** A rise in completed
-bills is good and a rise in median checkout is not, so `MetricTrend` carries
-`intent` separately from `direction`. Bills on hold and active counters carry
-no badge at all: both are right-now figures that ignore the date filter, and
-there is no previous value to compare them against. "Needs attention" compares
-`exceptions_windowed` with the same measure over the comparison window, because
+**Movement is coloured by meaning, not by direction.** A rise in completed
+bills is good and a rise in median checkout is not, so each card's comparison
+carries a `tone` as well as a `direction`. Bills on hold and active counters
+carry no comparison at all: both are right-now figures that ignore the date
+filter, and there is no previous value to compare them against. "Needs
+attention" compares `exceptions_windowed` against the same measure, because
 the headline count also carries sales stuck on every date.
 
 **Counter state** is one of `busy` (a cart is open on it), `open`, `idle` (a
-shift is open and nothing has been rung up for 45 minutes — only ever said
-about a window that includes now), `closing`, or `closed`. There is no
-`offline` state: a till that is not talking to us cannot tell us so, and is
+shift is open and nothing rung up for 45 minutes — only ever said about a
+window that includes now), `closing`, or `closed`. There is no `offline`
+state: a till that is not talking to us cannot tell us so, and is
 indistinguishable from one that is quiet.
 
 **Cashier names.** POS stores the sign-on identifier, not a directory. The
@@ -185,11 +353,10 @@ has. Each check reports `ready` of `of`, checks that apply to nothing are
 dropped, and the ring is the share of the rest that pass — so the percentage
 cannot be inflated by a check the shop does not use.
 
-**Export** writes CSV of what the board already fetched, gated on
-`reports.view`. There is no PDF or spreadsheet writer in this product and
-adding one to put four tables in a file would be a large dependency for a small
-job; the menu offers what actually works rather than three items where two
-produce a CSV under the wrong extension.
+**The busiest hour** on the briefing strip is a 28-day aggregate of this
+outlet's own completed bills, offered only while the chosen window is still
+running and only with at least 20 bills over 5 trading days behind it. It is
+labelled a pattern in the rows, not a forecast.
 
 ## What these boards deliberately will not say
 
@@ -227,14 +394,14 @@ ones the counter really produces:
 | Shown | Is |
 |---|---|
 | Slowest 1 in 10 | P90 of cart-open to cart-complete, same exclusions as the median |
-| Paid for | completed ÷ (completed + voided) over carts opened in the window |
+| Paid for | completed ÷ (completed + voided), over carts opened in the window |
 | Walked away | voided-before-payment ÷ carts opened — the only abandonment POS can see |
 
 The counter table's **On counter** column is carts `OPEN` or `HELD` on that
-till right now. It is not headed "Queue" and the panel's footnote says why.
+till right now. It is not headed "Queue", and the panel's footnote says why.
 
-*What would close this gap:* a device that counts people — a ticket dispenser, a
-door sensor, a camera — with a per-outlet feed POS could read live.
+*What would close this gap:* a device that counts people — a ticket dispenser,
+a door sensor, a camera — with a per-outlet feed POS could read live.
 
 **No loyalty.** There is no points table, no tier and no liability in this
 product, and none is read from another. The panel says so and does not show a
@@ -254,18 +421,27 @@ because nothing here produces one. When a POS-owned model integration lands
 through Console's central key arrangement, it adds items badged **AI suggestion**
 alongside these — it does not relabel them.
 
-That applies to the Retail board's strip too. It is headed **Operations pulse**
-with a **Rule-based** badge, never "AI Pulse", and both the heading and the
-badge flip the day `pulse.ai.available` turns true. The strip's contents are
-the two worst open alerts, the swing against the comparison window, and the
-hour this outlet is usually busiest — the last from a 28-day aggregate of its
-own completed bills, offered only while the chosen window is still running and
-only with at least 20 bills over 5 trading days behind it. It is labelled a
-pattern in the rows, not a forecast.
-
 **No marketplace channels.** Order channels lists only what this outlet has
 actually taken an order through, and says how many external connectors are
 configured (usually none).
+
+**No guest rating.** There is no review, rating or survey anywhere in POS and
+none is read from another product. The Restaurant board's fifth KPI therefore
+renders an em dash and "Not collected in POS" rather than a score, and the Guest
+experience panel says what is missing. A zero here would read as "guests rated
+us nothing", which is a far worse claim than "we do not ask".
+
+*What would close this gap:* a feedback capture POS can count — a prompt on the
+bill, or a rating written back by an ordering channel — giving a score per
+settled order.
+
+**No reservations or waiting list.** A table session starts when somebody is
+seated; nothing books one in advance. The Table status donut therefore has four
+slices — seated, free, billing, clearing — and no "reserved" wedge, because a
+wedge for a feature that does not exist would read as "nobody has booked". The
+Reservations quick action is present and disabled with the reason in plain
+words, rather than absent (which looks like an oversight) or pointed at the
+floor screen (which cannot answer a booking).
 
 ## The three states of a sale
 
@@ -296,7 +472,24 @@ that could turn an unknown into a double posting.
 - One visible focus ring, on the action green, application-wide.
 - Loading, error, empty, **unavailable** and permission states are distinct.
   "Unavailable" is styled unlike "empty" on purpose: "there is no loyalty scheme"
-  and "nobody has points" must not render identically.
+  and "nobody has points" must not render identically. **Zero is a sixth thing**:
+  a shop that took ₹0.00 has data and renders its panels, and a failed request
+  never renders ₹0.00 in their place.
+- The trend chart's highlight is reachable from the keyboard — the chart takes
+  focus and the arrow keys walk the bars, announcing each through a live region.
+  A tooltip only a mouse can open is a tooltip half the shop cannot use.
+- Sparklines are the one chart without a table under them. The KPI card states
+  its figure and its movement in words directly above the line, so the line
+  carries an `aria-label` summarising the shape instead of a second table of
+  twelve values under every card.
+- Movement and meaning are separate on a KPI card. The arrow follows the
+  movement, the colour follows whether that movement is good news. On Returns
+  they disagree: refunds rising is an increase and a problem.
+- A drawer traps nothing it should not — Escape closes it, focus moves in on
+  open and returns to whatever opened it on close.
+- One panel throwing does not take the board down. Each is wrapped in a
+  `PanelBoundary`, so seven good panels stay on screen and the eighth says what
+  is missing.
 
 ## Stale data across a company switch
 

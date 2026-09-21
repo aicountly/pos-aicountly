@@ -5,7 +5,7 @@
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, CircleAlert, Info } from 'lucide-react'
 import { sinceLabel, titleCase } from '../../format'
-import { ContextualEmpty, Panel } from '../../shell'
+import { EmptyState, Panel } from '../../shell'
 import type { RetailAlert, RetailBoard } from '../../types'
 import type { DashboardFilters } from '../../useDashboard'
 import { withFilters } from '../../registry'
@@ -117,9 +117,9 @@ export function OperationalAlerts({ board, filters }: { board: RetailBoard; filt
       }
     >
       {alerts.items.length === 0 ? (
-        <ContextualEmpty title="All clear">
+        <EmptyState title="All clear">
           No operational alert needs attention. Nothing is being hidden — no threshold has been crossed.
-        </ContextualEmpty>
+        </EmptyState>
       ) : (
         <>
           <div className="pos-alerts" role="list">

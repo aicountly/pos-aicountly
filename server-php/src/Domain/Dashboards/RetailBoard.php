@@ -1686,6 +1686,10 @@ final class RetailBoard
                 'severity'      => $alert['severity'] === 'critical' ? 'danger' : $alert['severity'],
                 'title'         => $alert['title'],
                 'explanation'   => $alert['context'],
+                // `metric` and `detail` are what the strip's chip shows: the
+                // same numbers as the explanation, in fewer words.
+                'metric'        => null,
+                'detail'        => $alert['context'],
                 'period_label'  => 'Right now',
                 'evidence_href' => $alert['href'],
                 'action_label'  => null,
@@ -1704,6 +1708,8 @@ final class RetailBoard
                     'title'         => 'Takings are ' . ($change > 0 ? 'up' : 'down') . ' ' . abs((int) round($change)) . '% '
                         . ($comparison['label'] ?? 'on the comparison window'),
                     'explanation'   => 'Counter takings this window against the comparison window. Both figures are on this screen.',
+                    'metric'        => ($change > 0 ? '+' : '−') . abs((int) round($change)) . '%',
+                    'detail'        => 'Against ' . number_format($comparison['net'], 0) . ' in the comparison window.',
                     'period_label'  => $this->win->from . ' — ' . $this->win->to,
                     'evidence_href' => null,
                     'action_label'  => null,
@@ -1719,8 +1725,10 @@ final class RetailBoard
                 'severity'      => 'info',
                 'title'         => $peak['minutes_until'] === null
                     ? 'Busiest hour is usually ' . $peak['label']
-                    : 'Busiest hour usually starts in ' . $peak['minutes_until'] . ' min (' . $peak['label'] . ')',
+                    : 'Busiest hour usually starts in ' . $peak['minutes_until'] . ' min',
                 'explanation'   => $peak['basis'],
+                'metric'        => $peak['label'],
+                'detail'        => 'Across ' . $peak['days_sampled'] . ' trading day(s) of this outlet\'s own bills.',
                 'period_label'  => 'Last 28 days',
                 'evidence_href' => null,
                 'action_label'  => null,
@@ -1835,12 +1843,16 @@ final class RetailBoard
         }
     }
 
+    /**
+     * The date this many days from that one.
+     *
+     * Window's, not a second copy: two implementations of a date boundary is
+     * two chances for a night shift to land on different days on two screens.
+     */
     private static function addDays(string $date, int $days): string
     {
         try {
-            return (new \DateTimeImmutable($date, new \DateTimeZone('UTC')))
-                ->modify(($days >= 0 ? '+' : '') . $days . ' days')
-                ->format('Y-m-d');
+            return Window::plusDays($date, $days);
         } catch (\Throwable) {
             return $date;
         }

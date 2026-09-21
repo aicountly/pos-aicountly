@@ -211,8 +211,9 @@
   background: var(--bg);
 }
 
-/* The dashboards bring their own padding; everything else gets it here. */
-.shell-content > :not(.pos-workspace) { padding: 20px; }
+/* The dashboards and the home screen bring their own padding; everything
+   else gets it here. */
+.shell-content > :not(.pos-workspace):not(.pos-home) { padding: 20px; }
 
 .shell-scrim {
   display: none;
@@ -256,7 +257,7 @@
   }
 
   .shell-header__right { justify-content: space-between; }
-  .shell-content > :not(.pos-workspace) { padding: 14px; }
+  .shell-content > :not(.pos-workspace):not(.pos-home) { padding: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

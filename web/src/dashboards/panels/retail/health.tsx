@@ -13,10 +13,24 @@
 import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { count, duration, money, percent } from '../../format'
-import { ContextualEmpty, Panel } from '../../shell'
+import { EmptyState, Panel } from '../../shell'
 import type { RetailBoard } from '../../types'
 import type { DashboardFilters } from '../../useDashboard'
 import { withFilters } from '../../registry'
+
+/**
+ * The verdict's tint, from the four the suggestion strip already defines.
+ *
+ * `healthy` is a success, not the default purple: a green box is the one
+ * a manager can glance past.
+ */
+const VERDICT_TONE: Record<string, string> = {
+  healthy: 'success',
+  moderate: 'warning',
+  high: 'warning',
+  critical: 'danger',
+  unknown: 'success',
+}
 
 function Metric({
   label,
@@ -54,9 +68,9 @@ export function CheckoutHealth({ board, filters }: { board: RetailBoard; filters
       }
     >
       {!measured ? (
-        <ContextualEmpty title="Nothing to measure yet">
+        <EmptyState title="Nothing to measure yet">
           No cart was opened in this period, so there is no checkout to time and no completion rate to report.
-        </ContextualEmpty>
+        </EmptyState>
       ) : (
         <>
           <div className="pos-health">
@@ -84,9 +98,11 @@ export function CheckoutHealth({ board, filters }: { board: RetailBoard; filters
             />
           </div>
 
-          <div className={`pos-verdict pos-verdict--${health.status}`}>
-            <Sparkles size={15} className="pos-verdict__icon" aria-hidden />
-            <p>
+          <div className={`pos-suggest pos-suggest--${VERDICT_TONE[health.status]}`}>
+            <span className="pos-suggest__mark" aria-hidden>
+              <Sparkles size={18} />
+            </span>
+            <p className="pos-suggest__body">
               <strong>
                 {health.status === 'unknown'
                   ? 'Not enough bills yet.'

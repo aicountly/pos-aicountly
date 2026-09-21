@@ -9,7 +9,7 @@
 
 import { Link } from 'react-router-dom'
 import { count, dateTime, duration, money } from '../../format'
-import { ContextualEmpty, Panel, StatusBadge } from '../../shell'
+import { EmptyState, Panel, StatusBadge } from '../../shell'
 import type { RetailBoard } from '../../types'
 import { IntegrationBadge, TenderStateBadge } from '../common'
 
@@ -20,12 +20,12 @@ export function HeldBills({ board }: { board: RetailBoard }) {
       description="Shown whatever the date filter says — a bill held yesterday is still on the counter today."
     >
       {board.held_bills.length === 0 ? (
-        <ContextualEmpty title="Nothing on hold">
+        <EmptyState title="Nothing on hold">
           Every bill that was started has been finished or voided. Nothing is waiting on a counter.
-        </ContextualEmpty>
+        </EmptyState>
       ) : (
         <div className="pos-table-wrap">
-          <table className="pos-table">
+          <table className="pos-table pos-table--compact">
             <thead>
               <tr>
                 <th scope="col">Reference</th>
@@ -50,7 +50,7 @@ export function HeldBills({ board }: { board: RetailBoard }) {
                     {/* The till owns resuming a bill, and settles the race between
                         two cashiers with a row lock when it does. This is a link
                         to that screen, not a second way to resume. */}
-                    <Link className="pos-button pos-button--quiet pos-button--small" to={`/?cart=${bill.cart_id}`}>
+                    <Link className="pos-button pos-button--quiet pos-button--small" to={`/till?cart=${bill.cart_id}`}>
                       Open on the till
                     </Link>
                   </td>
@@ -71,19 +71,17 @@ export function RecentTransactions({ board }: { board: RetailBoard }) {
       description="Payment, Books and Inventory are three separate outcomes and are shown as three."
     >
       {board.recent.length === 0 ? (
-        <ContextualEmpty
-          title="No retail activity for this period"
-          action={
-            <Link className="pos-button pos-button--secondary pos-button--small" to="/">
-              Start a sale
-            </Link>
-          }
-        >
-          Try another date range, or open the till and ring one up.
-        </ContextualEmpty>
+        <div className="pos-empty-panel">
+          <EmptyState title="No retail activity for this period">
+            Try another date range, or open the till and ring one up.
+          </EmptyState>
+          <Link className="pos-button pos-button--secondary pos-button--small" to="/till">
+            Start a sale
+          </Link>
+        </div>
       ) : (
         <div className="pos-table-wrap">
-          <table className="pos-table">
+          <table className="pos-table pos-table--compact">
             <thead>
               <tr>
                 <th scope="col">Bill</th>

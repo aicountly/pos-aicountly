@@ -10,9 +10,9 @@
  */
 
 import { useMemo, useState } from 'react'
-import { DonutChart, DonutSwatch } from '../../charts'
-import { decimal, money, moneyCompact, percent } from '../../format'
-import { ContextualEmpty, Panel, Unavailable } from '../../shell'
+import { DonutChart } from '../../charts'
+import { compactMoney, decimal, money, percent } from '../../format'
+import { EmptyState, Panel, Unavailable } from '../../shell'
 import type { RetailBoard } from '../../types'
 
 type Basis = 'amount' | 'qty' | 'bills'
@@ -41,8 +41,8 @@ export function TopSellingCategories({ board, periodLabel }: { board: RetailBoar
     [rows, basis],
   )
 
-  const total = slices.reduce((sum, slice) => sum + slice.value, 0)
-  const format = basis === 'amount' ? (value: number) => money(value) : (value: number) => decimal(value, basis === 'qty' ? 2 : 0)
+  const format =
+    basis === 'amount' ? (value: number) => compactMoney(value) : (value: number) => decimal(value, basis === 'qty' ? 2 : 0)
 
   return (
     <Panel
@@ -52,7 +52,7 @@ export function TopSellingCategories({ board, periodLabel }: { board: RetailBoar
           <label className="pos-field">
             <span className="pos-visually-hidden">Rank categories by</span>
             <select
-              className="pos-select-compact"
+              className="pos-select"
               value={basis}
               onChange={(event) => setBasis(event.target.value as Basis)}
             >
@@ -68,41 +68,28 @@ export function TopSellingCategories({ board, periodLabel }: { board: RetailBoar
     >
       {!categories.available ? (
         categories.reason === 'no_sales' ? (
-          <ContextualEmpty title="No retail activity for this period">
+          <EmptyState title="No retail activity for this period">
             Try another date range, or start a sale. Categories appear once a bill has lines on it.
-          </ContextualEmpty>
+          </EmptyState>
         ) : (
           <Unavailable title="No category to group these sales by">{categories.note}</Unavailable>
         )
       ) : slices.length === 0 ? (
-        <ContextualEmpty title="Nothing to rank on this basis">
+        <EmptyState title="Nothing to rank on this basis">
           Every category is zero when measured {BASES.find((b) => b.key === basis)?.label.toLowerCase()}.
-        </ContextualEmpty>
+        </EmptyState>
       ) : (
         <>
-          <div className="pos-category">
-            <DonutChart
-              slices={slices}
-              centreValue={basis === 'amount' ? moneyCompact(total) : decimal(total, basis === 'qty' ? 1 : 0)}
-              centreLabel={periodLabel}
-              format={format}
-              caption={`Top selling categories ${BASES.find((b) => b.key === basis)?.label.toLowerCase()}`}
-            />
-
-            <ul className="pos-category__legend">
-              {slices.map((slice, index) => (
-                <li key={slice.key} className="pos-category__row">
-                  <DonutSwatch index={index} />
-                  <span className="pos-category__name" title={slice.label}>
-                    {slice.label}
-                  </span>
-                  <span className="pos-category__share">
-                    {total > 0 ? percent((slice.value / total) * 100, 0) : '—'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <DonutChart
+            slices={slices.map((slice) => ({
+              key: slice.key,
+              label: slice.label,
+              value: slice.value,
+            }))}
+            format={format}
+            centreLabel={periodLabel}
+            caption={`Top selling categories ${BASES.find((b) => b.key === basis)?.label.toLowerCase()}`}
+          />
 
           <p className="pos-note">
             {categories.coverage_pc !== null && categories.coverage_pc < 99.5 && (

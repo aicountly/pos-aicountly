@@ -17,7 +17,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { User } from 'lucide-react'
 import { actor, count, dateTime, money, sinceLabel } from '../../format'
-import { ContextualEmpty, Panel, StatusBadge, type BadgeTone } from '../../shell'
+import { EmptyState, Panel, StatusBadge, type BadgeTone } from '../../shell'
 import type { CounterState, RetailBoard, RetailCounter } from '../../types'
 import type { DashboardFilters } from '../../useDashboard'
 import { withFilters } from '../../registry'
@@ -167,20 +167,18 @@ export function LiveCounterStatus({
       }
     >
       {counters.length === 0 ? (
-        <ContextualEmpty
-          title="No retail counters yet"
-          action={
-            <Link className="pos-button pos-button--secondary pos-button--small" to="/setup">
-              Go to Setup
-            </Link>
-          }
-        >
-          Create a till, or assign one to this outlet, and this board starts tracking it.
-        </ContextualEmpty>
+        <div className="pos-empty-panel">
+          <EmptyState title="No retail counters yet">
+            Create a till, or assign one to this outlet, and this board starts tracking it.
+          </EmptyState>
+          <Link className="pos-button pos-button--secondary pos-button--small" to="/setup">
+            Go to Setup
+          </Link>
+        </div>
       ) : (
         <>
           <div className="pos-table-wrap">
-            <table className="pos-table pos-counter-table">
+            <table className="pos-table pos-table--compact pos-counter-table">
               <thead>
                 <tr>
                   <th scope="col">Counter</th>
