@@ -249,11 +249,50 @@ web/src/
   offline/sync.ts          draining the outbox
   services/api.ts          typed fetch; one 401 retry with a fresh key
   context/PosContext.tsx   company scope, permissions, which till this is
+  dashboards/              the .pos-* design system, shared shell and charts
   home/                    the home screen at `/` — model.ts is the view model
                            and the file worth reading first
+  kitchen/                 the kitchen display: service.ts (the only door to
+                           the API), derive.ts (pure ageing, SLA, grouping),
+                           the hooks, and components/
   pages/                   Home, Till, Floor, Kitchen, Returns, OfflineQueue,
                            Reports, Setup
 ```
+
+## The kitchen display
+
+`GET v1/kds` answers a whole kitchen screen in one round trip: the live queue,
+the tickets just served, what each station is carrying, and today's prep
+performance. They are four questions with one scope, and asking them separately
+would let the board and the figures beside it disagree.
+
+Three rules hold on that screen and are worth stating, because each one is a
+bug somebody eventually writes:
+
+**A ticket's clock stops at `ready_at`.** Prep time is fired → ready, which is
+what the kitchen controls. Leaving it running until it is served marks the
+kitchen down for a waiter who was slow to the pass.
+
+**Late is the STATION's threshold, never a global one.** A bar ticket is late
+after four minutes and a tandoor ticket is not, so `pos_kds_stations.
+late_after_minutes` decides — per ticket, in the SQL and in the browser alike.
+
+**Today is the OUTLET's trading day.** The same `trading_timezone` and
+`day_start_minutes` the dashboards use, so a kitchen still open at 1am does not
+watch its on-time figure reset mid-service. With no outlet chosen the outlets
+may disagree, and the honest fallback is UTC midnight.
+
+The browser derives nothing it cannot honestly derive. The three counts across
+the top are totals of the tickets in view and always agree with the columns
+underneath; average prep time and on-time percentage are counted by PostgreSQL
+over the whole session and read as **unavailable** where the server has not
+answered, because an average computed from the two hundred tickets a screen
+happens to be holding is not the kitchen's average.
+
+Refreshing is polling, because polling is what this app has — no second
+realtime stack was added beside it. A hidden tab does not poll at all, and the
+ticket clocks tick locally in between, so the ageing stays live without a
+request behind it.
 
 ## Charts, without a chart library
 

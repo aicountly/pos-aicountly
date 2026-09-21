@@ -65,7 +65,7 @@ export function OutletReadinessCard({
               )
 
               return canManage ? (
-                <Link className="home-row" key={outlet.id} to="/setup">
+                <Link className="home-row" key={outlet.id} to="/setup?section=outlets">
                   {body}
                 </Link>
               ) : (
@@ -76,7 +76,7 @@ export function OutletReadinessCard({
             })}
 
             {outlets.length > shown.length && canManage && (
-              <Link className="home-btn home-btn--quiet" to="/setup">
+              <Link className="home-btn home-btn--quiet" to="/setup?section=outlets">
                 View all {outlets.length} outlets
               </Link>
             )}

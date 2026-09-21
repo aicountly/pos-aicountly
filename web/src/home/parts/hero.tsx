@@ -201,14 +201,19 @@ export function HomeHero({
 
         {mayManage && (
           <>
+            {/* Setup reads ?section=, so each button lands on the panel it is
+                about rather than on the page and a second click. */}
             <div className="home-hero__actions">
-              <Link className="home-btn home-btn--primary" to="/setup">
+              <Link
+                className="home-btn home-btn--primary"
+                to={outletsExist ? '/setup?section=tills' : '/setup?section=outlets'}
+              >
                 <Plus size={16} aria-hidden />
                 {outletsExist ? 'Set up first till' : 'Create outlet'}
                 <ArrowRight size={15} aria-hidden />
               </Link>
               {outletsExist && (
-                <Link className="home-btn" to="/setup">
+                <Link className="home-btn" to="/setup?section=outlets">
                   <Store size={15} aria-hidden /> Add another outlet
                 </Link>
               )}
@@ -286,7 +291,7 @@ export function HomeHero({
             <ArrowRight size={15} aria-hidden />
           </Link>
           {can('terminal.manage') && (
-            <Link className="home-btn" to="/setup">
+            <Link className="home-btn" to="/setup?section=devices">
               <ScanLine size={15} aria-hidden /> Till & devices
             </Link>
           )}

@@ -273,7 +273,9 @@ export function buildSuggestions(input: SuggestionInput): Suggestion[] {
         ? 'Add the counter this browser stands at to start selling.'
         : 'An outlet and its first till are what a sale is recorded against.',
       tone: 'info',
-      action: input.can('terminal.manage') ? { label: 'Set up', to: '/setup' } : undefined,
+      action: input.can('terminal.manage')
+        ? { label: 'Set up', to: input.outletsExist ? '/setup?section=tills' : '/setup?section=outlets' }
+        : undefined,
     })
   } else if (!input.shiftOpen) {
     items.push({
@@ -324,7 +326,7 @@ export function buildSuggestions(input: SuggestionInput): Suggestion[] {
       title: 'This till has no receipt printer set',
       body: 'Sales can still be taken; there is nothing configured to print them on.',
       tone: 'info',
-      action: input.can('terminal.manage') ? { label: 'Set up', to: '/setup' } : undefined,
+      action: input.can('terminal.manage') ? { label: 'Set up', to: '/setup?section=tills' } : undefined,
     })
   }
 
