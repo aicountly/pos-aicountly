@@ -35,17 +35,23 @@ and what kind of shop the outlet is (`pos_mode`) — a retail-only outlet has no
 Restaurant tab rather than an empty one. Every endpoint enforces its own
 permission, so hiding a tab is presentation and nothing more.
 
+Restaurant Operations is the one that is a live operations screen rather than a
+report: it re-asks every 45 seconds, and the figures that ignore the date filter
+(tables, tickets, open orders) are labelled apart from the ones it windows
+(takings, serve time, tickets served).
+
 Alongside them, **Shift report** (`/reports`) is the handover screen: one
 cashier's shift at one till, from what it sold to whether the drawer balances,
 with the close-out itself behind a three-step count. See
 [docs/SHIFT_REPORT.md](docs/SHIFT_REPORT.md).
 
 The boards are careful about what they claim. There is no provider-confirmed
-tender total, no device connection status, no loyalty balance and no AI
-suggestion, because POS has none of those to report; each renders as an explicit
-*unavailable* state that looks different from an empty one. See
-[docs/DASHBOARDS.md](docs/DASHBOARDS.md) for the metric definitions, the expected
-cash formula and the exact contract gaps.
+tender total, no device connection status, no loyalty balance, no guest rating,
+no reservations and no AI model, because POS has none of those to report; each
+renders as an explicit *unavailable* state that looks different from an empty
+one, and every suggestion on every board is badged **Rule-based alert** because
+that is what it is. See [docs/DASHBOARDS.md](docs/DASHBOARDS.md) for the metric
+definitions, the expected cash formula and the exact contract gaps.
 
 Signing in is the AICOUNTLY portal's job, the same as every other AICOUNTLY
 SaaS: the app redirects to the portal, the portal returns an `auth_token`, and

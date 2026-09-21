@@ -241,6 +241,101 @@ export function BarChart({
   )
 }
 
+/**
+ * A ring over a FIXED set of named states, each with a colour of its own.
+ *
+ * Not the same chart as DonutChart below, and the difference is the reason
+ * both exist:
+ *
+ *   DonutChart  a breakdown of whatever came back — payment methods, order
+ *               channels — so it assigns tones in order, drops empty slices
+ *               and prints its own legend table.
+ *   StateDonut  a set that is known in advance and does not change. Table
+ *               states carry the floor plan's own colours, so they cannot be
+ *               assigned in arrival order, and a state with nothing in it
+ *               STAYS IN THE LEGEND — "nothing is waiting to be cleared" is
+ *               a fact a floor manager wants on the card, not an absence.
+ *
+ * Drawn as one arc per slice with stroke-dasharray rather than a
+ * conic-gradient, so the same numbers produce the accessible table underneath
+ * and a zero-sized slice draws nothing instead of a hairline.
+ */
+export function StateDonut({
+  slices,
+  centreValue,
+  centreLabel,
+  caption,
+  format,
+  tableVisible = false,
+}: {
+  slices: Array<{ key: string; label: string; value: number; colour: string }>
+  centreValue: string
+  centreLabel: string
+  caption: string
+  format: (value: number) => string
+  tableVisible?: boolean
+}) {
+  const titleId = useId()
+  const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0)
+
+  const radius = 54
+  const circumference = 2 * Math.PI * radius
+  let consumed = 0
+
+  return (
+    <div className="pos-chart pos-chart--donut">
+      <svg viewBox="0 0 140 140" role="img" aria-labelledby={titleId}>
+        <title id={titleId}>
+          {caption}: {slices.map((slice) => `${slice.label} ${format(slice.value)}`).join(', ')}
+        </title>
+
+        {/* The track. It is also the whole chart when nothing has been counted
+            yet, which is why it is drawn unconditionally. */}
+        <circle cx="70" cy="70" r={radius} fill="none" stroke="#eef2ef" strokeWidth="16" />
+
+        <g transform="rotate(-90 70 70)">
+          {slices.map((slice) => {
+            const value = Math.max(0, slice.value)
+            if (total <= 0 || value <= 0) return null
+
+            const length = (value / total) * circumference
+            const offset = consumed
+            consumed += length
+
+            return (
+              <circle
+                key={slice.key}
+                cx="70"
+                cy="70"
+                r={radius}
+                fill="none"
+                stroke={slice.colour}
+                strokeWidth="16"
+                strokeDasharray={`${length.toFixed(2)} ${(circumference - length).toFixed(2)}`}
+                strokeDashoffset={(-offset).toFixed(2)}
+              />
+            )
+          })}
+        </g>
+
+        <text x="70" y="68" textAnchor="middle" fontSize="19" fontWeight="800" fill="var(--pos-text)">
+          {centreValue}
+        </text>
+        <text x="70" y="85" textAnchor="middle" fontSize="10" fill="var(--pos-muted)">
+          {centreLabel}
+        </text>
+      </svg>
+
+      <ChartTable
+        visible={tableVisible}
+        caption={caption}
+        columns={['State', 'Count']}
+        rows={slices.map((slice) => [slice.label, format(slice.value)])}
+      />
+    </div>
+  )
+}
+
 export interface ShareRow {
   key: string
   label: string

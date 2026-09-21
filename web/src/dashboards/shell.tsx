@@ -65,6 +65,17 @@ export interface MetricProps {
   icon?: ReactNode
   /** Which tint the icon tile and the spark take. */
   tone?: 'brand' | 'info' | 'danger' | 'warning' | 'neutral'
+  /**
+   * A wash across the whole card, for a row where the cards are a set rather
+   * than a ranking — the restaurant board's five.
+   *
+   * Deliberately a different prop from `tone`: `tone` is what the figure
+   * MEANS and is read by the icon tile and the meter, and a card washed
+   * purple because it is about money must not thereby claim to be a warning.
+   * Decoration either way; every card still states its label, its figure and
+   * its direction in words.
+   */
+  accent?: 'green' | 'blue' | 'orange' | 'purple' | 'cyan'
   /** The shape of the recent history, drawn small. Never the only statement of it. */
   spark?: ReactNode
   /** A meter, for a metric that is a fraction of something. */
@@ -105,6 +116,7 @@ export function MetricCard({
   onOpen,
   icon,
   tone = 'brand',
+  accent,
   spark,
   progress,
   hint,
@@ -159,9 +171,11 @@ export function MetricCard({
     .filter(Boolean)
     .join('. ')
 
+  const className = `pos-metric${accent ? ` pos-metric--${accent}` : ''}`
+
   if (href) {
     return (
-      <Link className="pos-metric" to={href} title={hint} aria-label={`${description}. View details`}>
+      <Link className={className} to={href} title={hint} aria-label={`${description}. View details`}>
         {body}
       </Link>
     )
@@ -170,7 +184,7 @@ export function MetricCard({
   return (
     <button
       type="button"
-      className="pos-metric"
+      className={className}
       onClick={onOpen}
       disabled={!onOpen}
       title={hint}
@@ -562,6 +576,7 @@ export interface DashboardTab {
 export function PosDashboardShell({
   title,
   description,
+  headerIcon,
   activeDashboard,
   visibleTabs,
   contextControls,
@@ -578,6 +593,8 @@ export function PosDashboardShell({
 }: {
   title: string
   description: string
+  /** A mark beside the title. Decoration, so it never carries a meaning of its own. */
+  headerIcon?: ReactNode
   activeDashboard: string
   visibleTabs: DashboardTab[]
   contextControls?: ReactNode
@@ -600,9 +617,16 @@ export function PosDashboardShell({
     <main className="pos-workspace">
       <header className="pos-page-header">
         <div className="pos-page-header__titles">
-          <p className="pos-eyebrow">AICOUNTLY POS</p>
-          <h1>{title}</h1>
-          <p className="pos-description">{description}</p>
+          {headerIcon && (
+            <span className="pos-page-header__mark" aria-hidden>
+              {headerIcon}
+            </span>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <p className="pos-eyebrow">AICOUNTLY POS</p>
+            <h1>{title}</h1>
+            <p className="pos-description">{description}</p>
+          </div>
         </div>
 
         <div className="pos-page-header__side">

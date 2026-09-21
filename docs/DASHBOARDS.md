@@ -216,6 +216,62 @@ exactly as it narrows sales. Before this, the Returns card answered for the whol
 company while every figure beside it answered for one outlet, and the two were
 read as one story.
 
+## Restaurant Operations: live figures and windowed ones
+
+This board is the only one of the five that is a **live operations screen**
+rather than a report, and it mixes two kinds of figure. Both are labelled on
+screen, because a board that mixed them silently would let a manager filter to
+last Tuesday and conclude the kitchen was empty.
+
+| Live — ignores `from`/`to` | Windowed by `from`/`to` |
+|---|---|
+| Tables occupied, covers, table states | Today's sales, and the order count behind it |
+| Active orders, and the value unsettled on the floor | Average serve time, and its sample size |
+| Tickets received, in the kitchen, ready, running late | Tickets served |
+| Orders on the board that are still open | Orders on the board that are settled |
+
+An order on the floor is open until somebody settles it, whatever date is in the
+filter, so the open ones are always listed. The rule is stated in the panel note
+rather than left to be discovered.
+
+**Average serve time** is `AVG(pos_kots.served_at - fired_at)` over tickets
+marked served inside the window, on this POS. Tickets the kitchen never marked
+are not in it, which is why the sample size sits beside the figure and why
+`available: false` — not a zero — is returned when nothing was marked at all.
+
+**Both comparisons on this board are computed server-side against the window of
+the same length immediately before**, independent of the `compare` filter, which
+this board does not offer. `change_pc` is null when the preceding window took
+nothing: dividing by zero produces Infinity, and "up ∞%" is not a fact about a
+restaurant. Serve time is coloured by *meaning* rather than by direction — a
+fall is good news and is green, while the arrow still points the way the figure
+moved.
+
+**The board re-asks every 45 seconds**, paused while the tab is in the
+background. That reuses the existing board fetch (`useBoard`'s `refreshMs`); POS
+has no socket and no event bus, and adding one for a single screen would leave
+two ways for it to be wrong.
+
+**The order state in the list is derived, not stored.** It is read from the
+order's own tickets — late beats everything, then in the kitchen, then ready,
+then served — so there is no second column to go stale against `pos_kots`.
+
+**The suggestion strip is rule-based**, on the same terms as Business
+Overview's — see *The briefing strip is rule-based, and says so* below. It
+differs only in where the rules run: Overview computes its items in SQL, and
+this board's are computed in the browser by
+`getRestaurantOperationalInsight(metrics)` in
+`web/src/dashboards/restaurantInsight.ts`, because they read figures four
+panels have already been handed. That function is the seam an intelligence
+endpoint replaces, and its items would arrive with `kind: 'ai'` and badge
+themselves. It must not relabel the rules.
+
+**"No restaurant set up here" is not "the restaurant is quiet".** `setup.configured`
+tells them apart, and the board draws a getting-started checklist for the first
+and an empty service for the second. The checklist counts real rows — outlets,
+floors, tables, stations, menu items, open shifts — so a shop halfway through
+can see where it stopped. No KPI row is drawn at all when nothing is configured.
+
 ## The briefing strip is rule-based, and says so
 
 The panel on Business Overview is headed **Aicountly AI Insights** because that
@@ -234,6 +290,10 @@ Three things keep that honest and all three are load-bearing:
 When a model does publish here its items arrive with `kind: 'ai'` and badge
 themselves differently. The badge is on the item and never on the panel, for
 exactly that reason.
+
+Restaurant Operations carries the same arrangement under the heading **Aicountly
+AI Suggests**: a BETA badge on the strip, `Rule-based alert` on the item, and one
+rule engine behind it that a model would replace rather than relabel.
 
 Rules only fire when the numbers behind them exist. There is no "no data" card
 and no rounded-up encouragement: a quiet shop gets a short strip, which is the
@@ -291,6 +351,24 @@ alongside these — it does not relabel them.
 **No marketplace channels.** Order channels lists only what this outlet has
 actually taken an order through, and says how many external connectors are
 configured (usually none).
+
+**No guest rating.** There is no review, rating or survey anywhere in POS and
+none is read from another product. The Restaurant board's fifth KPI therefore
+renders an em dash and "Not collected in POS" rather than a score, and the Guest
+experience panel says what is missing. A zero here would read as "guests rated
+us nothing", which is a far worse claim than "we do not ask".
+
+*What would close this gap:* a feedback capture POS can count — a prompt on the
+bill, or a rating written back by an ordering channel — giving a score per
+settled order.
+
+**No reservations or waiting list.** A table session starts when somebody is
+seated; nothing books one in advance. The Table status donut therefore has four
+slices — seated, free, billing, clearing — and no "reserved" wedge, because a
+wedge for a feature that does not exist would read as "nobody has booked". The
+Reservations quick action is present and disabled with the reason in plain
+words, rather than absent (which looks like an oversight) or pointed at the
+floor screen (which cannot answer a booking).
 
 ## The three states of a sale
 
