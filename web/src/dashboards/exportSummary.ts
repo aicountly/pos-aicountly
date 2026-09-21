@@ -14,7 +14,7 @@
  * Sheets and in Books.
  */
 
-import type { OverviewBoard } from './types'
+import type { OverviewBoard, RetailBoard } from './types'
 import type { DashboardFilters } from './useDashboard'
 
 /** One CSV field. Quotes are doubled, and anything risky is quoted. */
@@ -133,6 +133,162 @@ export function downloadOverviewCsv(board: OverviewBoard, filters: DashboardFilt
 
   anchor.href = url
   anchor.download = `aicountly-pos-overview-${board.window.from}-to-${board.window.to}.csv`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Retail Operations, as a spreadsheet.
+ *
+ * Same rules as the board above: built from the object the page is already
+ * rendering, so there is no second query and no second definition of anything.
+ * The head of the file carries the window, the outlet, the till and the
+ * comparison, because a figure without its filters is a figure somebody will
+ * misread next quarter.
+ *
+ * The two things this board deliberately cannot measure are written into the
+ * file as well. A CSV that quietly omitted them would read as though the
+ * columns had simply not been exported.
+ */
+export function buildRetailCsv(board: RetailBoard, filters: DashboardFilters): string {
+  const lines: string[] = []
+
+  lines.push(row('Aicountly POS — Retail Operations'))
+  lines.push(row('From', board.window.from, 'To', board.window.to))
+  lines.push(row('Timezone', board.window.timezone, 'Day starts at (minutes)', board.window.day_start_minutes))
+  lines.push(row('Outlet', filters.locationId === null ? 'All outlets' : String(filters.locationId)))
+  lines.push(row('Counter', filters.terminalId === null ? 'All counters' : String(filters.terminalId)))
+  lines.push(row('Comparison', board.window.comparison?.label ?? 'None'))
+  lines.push(row('Generated at', board.window.generated_at))
+  lines.push(row('Scope', board.window.scope_note))
+  lines.push('')
+
+  lines.push(row('Headline figures'))
+  lines.push(row('Measure', 'Value', 'Comparison window'))
+  lines.push(row('Active counters', board.kpis.active_counters, ''))
+  lines.push(row('Tills in scope', board.kpis.total_counters, ''))
+  lines.push(row('Completed bills', board.kpis.bills, board.comparison?.bills ?? ''))
+  lines.push(row('Net taken', board.kpis.net, board.comparison?.net ?? ''))
+  lines.push(row('Bills on hold (all dates)', board.kpis.held_bills, ''))
+  lines.push(row('Value on hold (all dates)', board.kpis.held_value, ''))
+  lines.push(
+    row(
+      'Median checkout (seconds)',
+      board.kpis.checkout.available ? board.kpis.checkout.median_seconds : 'Not measurable',
+      board.comparison?.checkout.available ? board.comparison.checkout.median_seconds : '',
+    ),
+  )
+  lines.push(row('Needs attention', board.kpis.exceptions, ''))
+  lines.push(row('Needs attention (this window only)', board.kpis.exceptions_windowed, board.comparison?.exceptions_windowed ?? ''))
+  lines.push('')
+
+  lines.push(row('Counter status'))
+  lines.push(row('Counter', 'Name', 'Outlet', 'Status', 'On counter', 'Bills', 'Bills per hour', 'Taken', 'Voids', 'Shift opened by', 'Shift opened at'))
+  for (const counter of board.counters) {
+    lines.push(
+      row(
+        counter.terminal_code,
+        counter.display_name,
+        counter.location_name,
+        counter.state,
+        counter.open_carts,
+        counter.bills,
+        counter.bills_per_hour ?? '',
+        counter.net,
+        counter.voids,
+        counter.shift?.opened_by ?? '',
+        counter.shift?.opened_at ?? '',
+      ),
+    )
+  }
+  lines.push('')
+
+  lines.push(row(board.trend.bucket === 'hour' ? 'Sales by hour' : 'Sales by day'))
+  lines.push(row('Bucket', 'Bills', 'Sales', 'Items', 'Average bill', 'Voids', 'Median checkout (seconds)', 'Comparison sales'))
+  for (const point of board.trend.points) {
+    lines.push(
+      row(
+        point.bucket,
+        point.bills,
+        point.sales,
+        point.items,
+        point.average_bill,
+        point.voids,
+        point.checkout_seconds ?? '',
+        point.comparison_sales ?? '',
+      ),
+    )
+  }
+  lines.push('')
+
+  lines.push(row('Checkout health'))
+  lines.push(row('Measure', 'Value', 'Note'))
+  // Written out rather than omitted: a missing row reads as a column that was
+  // not exported, and this one is a column that does not exist.
+  lines.push(row('Average waiting time', 'Not measured', board.checkout_health.wait.note))
+  lines.push(row('Median checkout (seconds)', board.checkout_health.checkout.median_seconds ?? '', ''))
+  lines.push(row('Slowest 1 in 10 (seconds)', board.checkout_health.checkout.p90_seconds ?? '', ''))
+  lines.push(row('Carts opened', board.checkout_health.completion.started, ''))
+  lines.push(row('Paid for', board.checkout_health.completion.completed, ''))
+  lines.push(row('Voided before payment', board.checkout_health.completion.voided, ''))
+  lines.push(row('Still on a counter', board.checkout_health.on_counter.carts, ''))
+  lines.push(row('Verdict', board.checkout_health.status, board.checkout_health.summary))
+  lines.push('')
+
+  lines.push(row('Top selling categories'))
+  if (board.categories.available) {
+    lines.push(row('Category', 'Sales value', 'Quantity', 'Bills', 'Share of grouped sales (%)'))
+    for (const category of board.categories.rows) {
+      lines.push(row(category.label, category.amount, category.qty, category.bills, category.share_pc ?? ''))
+    }
+    lines.push(row('Grouped share of the period (%)', board.categories.coverage_pc ?? ''))
+    lines.push(row('Ungrouped value', board.categories.uncategorised))
+    lines.push(row('Source', board.categories.source))
+  } else {
+    lines.push(row('Not available', board.categories.note))
+  }
+  lines.push('')
+
+  lines.push(row('Operational alerts'))
+  lines.push(row('Severity', 'Alert', 'Context', 'At'))
+  for (const alert of board.alerts.items) {
+    lines.push(row(alert.severity, alert.title, alert.context, alert.at ?? ''))
+  }
+  lines.push(row(board.alerts.note))
+  lines.push('')
+
+  lines.push(row('Shift readiness'))
+  if (board.readiness.available) {
+    lines.push(row('Check', 'Ready', 'Of', 'Note'))
+    for (const check of board.readiness.checks) {
+      lines.push(row(check.label, check.ready, check.of, check.note))
+    }
+    lines.push(row('Overall (%)', board.readiness.percent ?? ''))
+  } else {
+    lines.push(row('Not available', board.readiness.note))
+  }
+  lines.push('')
+
+  lines.push(row('Rule-based alerts'))
+  lines.push(row('Severity', 'Alert', 'Figure', 'Detail', 'Period'))
+  for (const insight of board.pulse.items) {
+    lines.push(row(insight.severity ?? 'info', insight.title, insight.metric ?? '', insight.detail ?? '', insight.period_label))
+  }
+  lines.push('')
+  lines.push(row(board.pulse.ai.note))
+
+  return lines.join('\r\n')
+}
+
+export function downloadRetailCsv(board: RetailBoard, filters: DashboardFilters): void {
+  const blob = new Blob(['\ufeff', buildRetailCsv(board, filters)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+
+  anchor.href = url
+  anchor.download = `aicountly-pos-retail-${board.window.from}-to-${board.window.to}.csv`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()

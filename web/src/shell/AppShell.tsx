@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   BarChart3,
   ChefHat,
+  ChevronDown,
   CloudOff,
   Coins,
   LayoutDashboard,
@@ -12,6 +13,7 @@ import {
   ScanLine,
   Settings as SettingsIcon,
   ShoppingCart,
+  Sparkles,
   Store,
   Table2,
   UploadCloud,
@@ -214,6 +216,97 @@ function NavGroup({
   )
 }
 
+/**
+ * Who is signed in, and what POS calls them.
+ *
+ * The role underneath the name is the POS permission profile they were
+ * assigned — a real row, from `v1/session`, not a label inferred from what
+ * they happen to be allowed to do. Someone with no profile (an owner, whose
+ * access comes from Manage) gets the label Manage gives them, and someone with
+ * neither gets no second line rather than an invented one.
+ */
+function SignedInAs() {
+  const { signOut } = useAuth()
+  const { session } = usePos()
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLDivElement | null>(null)
+  const trigger = useRef<HTMLButtonElement | null>(null)
+  const menuId = useId()
+
+  useEffect(() => {
+    if (!open) return
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        trigger.current?.focus()
+      }
+    }
+    const onClick = (event: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(event.target as Node)) setOpen(false)
+    }
+
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onClick)
+
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onClick)
+    }
+  }, [open])
+
+  if (!session) return null
+
+  const name = session.user.display_name
+  const roles = session.user.roles ?? []
+  const role = roles.length === 0 ? null : roles.join(' · ')
+
+  const initials =
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || '?'
+
+  return (
+    <div className="shell-who" ref={wrap}>
+      <button
+        type="button"
+        ref={trigger}
+        className="shell-who__trigger"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={open ? menuId : undefined}
+      >
+        <span className="shell-who__avatar" aria-hidden>
+          {initials}
+        </span>
+        <span className="shell-who__text">
+          <span className="shell-who__name">{name}</span>
+          {role && <span className="shell-who__role">{role}</span>}
+        </span>
+        <ChevronDown size={14} aria-hidden />
+      </button>
+
+      {open && (
+        <div className="shell-who__menu" id={menuId} role="menu">
+          <p className="shell-who__menu-head">
+            <strong>{name}</strong>
+            <span>{role ?? 'No POS role assigned'}</span>
+          </p>
+          <button type="button" role="menuitem" className="shell-who__menu-item" onClick={signOut}>
+            <LogOut size={14} aria-hidden /> Log out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AppShell() {
   const { signOut } = useAuth()
   const { session, can, scope } = usePos()
@@ -258,6 +351,17 @@ export function AppShell() {
           <NavGroup label="Work" entries={visible(WORK_NAV)} onNavigate={closeNav} />
         </nav>
 
+        {/* A standing note about what the boards are for, not an alert. It
+            carries no count and no badge, because a number here would be a
+            number nobody asked this component to fetch. */}
+        <aside className="shell-promo" aria-label="About the dashboards">
+          <Sparkles size={15} aria-hidden />
+          <div>
+            <strong>Smarter retail happens here.</strong>
+            <p>Live counters, checkout timing and rule-based alerts, read straight from your own tills.</p>
+          </div>
+        </aside>
+
         <div className="shell-user">
           <span className="shell-user__name">{session?.user.display_name ?? '—'}</span>
           <button type="button" className="shell-signout" onClick={signOut}>
@@ -288,6 +392,7 @@ export function AppShell() {
             <ConnectionState />
             {scope && <span className="shell-fy num">FY {scope.fy_id}</span>}
             <AppLauncher />
+            <SignedInAs />
           </div>
         </header>
 

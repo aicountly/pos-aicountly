@@ -2588,3 +2588,272 @@
   fill: var(--pos-muted);
   font-size: 10px;
 }
+
+/* ==========================================================================
+   Retail Operations
+   --------------------------------------------------------------------------
+   Only what the shared vocabulary above does not already cover. The strip,
+   the chip cards, the suggestion box, the metric accents, the donut, the
+   spark and the compact table are all reused from it — this block is the
+   counter table's own columns, the checkout trio, the alert rows and the
+   readiness ring, and nothing else.
+   ========================================================================== */
+
+/*
+ * Three panels across, with the counter table given the most room.
+ *
+ * Every track states a zero minimum, for the reason at .pos-dashboard-content:
+ * a grid item's automatic minimum is min-content, and one wide table in an
+ * `auto` track scrolls the whole page sideways.
+ */
+.pos-grid-retail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.pos-grid-retail--secondary {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+/* --- Live counter status -------------------------------------------------- */
+
+/*
+ * Five columns in a card that is a third of the page.
+ *
+ * Headers wrap rather than forcing their column to the width of "On counter"
+ * on one line, and the meta line under a counter code is clipped rather than
+ * allowed to set the column width. Both are what keep this table on screen at
+ * 1280 instead of inside a sideways scroller.
+ */
+.pos-counter-table th { white-space: normal; line-height: 1.3; }
+.pos-counter-table td,
+.pos-counter-table th { padding: 9px 6px; }
+.pos-counter-table td:first-child,
+.pos-counter-table th:first-child { padding-left: 2px; }
+.pos-counter-table td:last-child,
+.pos-counter-table th:last-child { padding-right: 2px; }
+
+.pos-counter-row__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pos-counter-row__meta {
+  display: block;
+  max-width: 112px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pos-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.pos-counter-table tbody tr[aria-selected='true'] { background: var(--pos-soft-green); }
+
+/* Initials only for the person who is signed in. POS has no name for another
+   cashier's identifier, so everyone else gets a neutral mark and the whole
+   identifier in the cell's tooltip. */
+.pos-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--pos-soft-green);
+  color: var(--pos-action);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.pos-cashier { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.pos-cashier__name { max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pos-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 21px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef2ef;
+  color: #526259;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-pill--busy { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+.pos-pill--calm { background: var(--success-bg, #edf8e9); color: var(--success, #216f13); }
+
+.pos-showmore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pos-action);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pos-showmore:hover { text-decoration: underline; }
+
+/* --- Queue and checkout health -------------------------------------------- */
+
+.pos-health {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: 14px;
+}
+
+.pos-health__metric {
+  min-width: 0;
+  padding: 2px 12px;
+  border-right: 1px solid #edf1ee;
+}
+
+.pos-health__metric:first-child { padding-left: 0; }
+.pos-health__metric:last-child { border-right: 0; padding-right: 0; }
+
+.pos-health__label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--pos-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.pos-health__value {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 20px;
+  line-height: 1.1;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.pos-health__note { color: var(--pos-muted); font-size: 11px; }
+
+/* --- Operational alerts ---------------------------------------------------- */
+
+.pos-alerts { display: grid; gap: 2px; }
+
+.pos-alert {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 6px;
+  border: 0;
+  border-bottom: 1px solid #edf1ee;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.pos-alert:last-child { border-bottom: 0; }
+a.pos-alert:hover { background: var(--surface-2, #f8faf8); }
+
+.pos-alert__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #eef2ef;
+  color: #526259;
+}
+
+.pos-alert__icon svg { width: 14px; height: 14px; }
+.pos-alert--critical .pos-alert__icon { background: var(--danger-bg, #ffeded); color: var(--danger, #aa2929); }
+.pos-alert--warning .pos-alert__icon { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+.pos-alert--info .pos-alert__icon { background: var(--info-bg, #edf3ff); color: var(--info, #315dab); }
+
+.pos-alert__title { display: block; font-size: 12.5px; font-weight: 650; }
+.pos-alert__context { display: block; margin-top: 2px; color: var(--pos-muted); font-size: 11.5px; line-height: 1.5; }
+.pos-alert__at { padding-top: 1px; color: var(--pos-muted); font-size: 11px; white-space: nowrap; }
+
+/* --- Shift readiness ------------------------------------------------------- */
+
+.pos-readiness {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.pos-readiness__ring { display: grid; place-items: center; }
+.pos-readiness__ring svg { width: 96px; height: 96px; }
+.pos-readiness__track { stroke: #eef2ef; }
+.pos-readiness__value { stroke: var(--pos-brand); }
+.pos-readiness__pc { font-size: 19px; font-weight: 800; fill: var(--pos-text); }
+.pos-readiness__of { font-size: 9px; fill: var(--pos-muted); }
+
+.pos-readiness__checks { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+
+.pos-readiness__check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pos-readiness__check span:last-child { color: var(--pos-muted); font-variant-numeric: tabular-nums; }
+.pos-readiness__mark { display: inline-grid; place-items: center; width: 16px; height: 16px; }
+.pos-readiness__mark--done { color: var(--success, #216f13); }
+.pos-readiness__mark--part { color: var(--warning, #805500); }
+.pos-readiness__mark--none { color: var(--pos-muted); }
+
+/* An empty state with the button that fixes it under it. */
+.pos-empty-panel { display: grid; justify-items: center; gap: 4px; text-align: center; }
+
+/* --- Reflow ---------------------------------------------------------------- */
+
+@media (max-width: 1400px) {
+  .pos-grid-retail,
+  .pos-grid-retail--secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-grid-retail > :last-child,
+  .pos-grid-retail--secondary > :last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 900px) {
+  .pos-grid-retail,
+  .pos-grid-retail--secondary { grid-template-columns: minmax(0, 1fr); }
+  .pos-grid-retail > :last-child,
+  .pos-grid-retail--secondary > :last-child { grid-column: auto; }
+}
+
+@media (max-width: 720px) {
+  .pos-health { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .pos-health__metric { padding: 0 0 9px; border-right: 0; border-bottom: 1px solid #edf1ee; }
+  .pos-health__metric:last-child { border-bottom: 0; padding-bottom: 0; }
+  .pos-readiness { grid-template-columns: minmax(0, 1fr); }
+  .pos-readiness__ring { justify-self: center; }
+}

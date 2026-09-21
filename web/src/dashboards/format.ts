@@ -43,6 +43,24 @@ export function percent(value: number | null | undefined, places = 1): string {
   return `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: places }).format(value)}%`
 }
 
+/**
+ * "02:14" — a stopwatch reading, for a duration that is compared at a glance.
+ *
+ * Separate from `duration()` on purpose: "2m" is the right way to say how long
+ * a bill has been held, and mm:ss is the right way to say how long a checkout
+ * takes, because the seconds are the part that moves.
+ */
+export function clockDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '—'
+
+  const total = Math.max(0, Math.round(seconds))
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  if (total >= 3600) return `${Math.floor(total / 3600)}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`
+
+  return `${pad(Math.floor(total / 60))}:${pad(total % 60)}`
+}
+
 /** "2h 18m", "14m", "48s" — the units a counter actually talks in. */
 export function duration(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return '—'
