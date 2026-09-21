@@ -11,7 +11,7 @@
  * different facts.
  */
 
-import { ComboTrendChart, ChartTable, DonutChart, type ComboPoint, type DonutSlice } from '../dashboards/charts'
+import { ChartTable, ComboTrendChart, RingChart, type ComboPoint, type RingSlice } from '../dashboards/charts'
 import { count, decimal, money, percent } from '../dashboards/format'
 import { Panel } from '../dashboards/shell'
 import { formatDay, formatRange, PERIODS, periodFor } from './periods'
@@ -151,7 +151,7 @@ function ReasonsPanel({
   onReason: (code: string | null) => void
 }) {
   const reasons = summary?.reasons ?? []
-  const slices: DonutSlice[] = reasons.slice(0, 6).map((reason, index) => ({
+  const slices: RingSlice[] = reasons.slice(0, 6).map((reason, index) => ({
     key: reason.reason_code,
     label: labelFor(REASON_TERMS, reason.reason_code),
     value: reason.items,
@@ -168,7 +168,7 @@ function ReasonsPanel({
         <p className="pos-muted returns-quiet">No returns in this period, so there is nothing to attribute.</p>
       ) : (
         <div className="returns-reasons">
-          <DonutChart
+          <RingChart
             slices={slices}
             centreValue={decimal(summary.kpis.items_returned, 0)}
             centreLabel={summary.kpis.items_returned === 1 ? 'item' : 'items'}

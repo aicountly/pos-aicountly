@@ -246,11 +246,18 @@
    Metric cards
    -------------------------------------------------------------------------- */
 
+/*
+ * As many columns as there are cards.
+ *
+ * `auto-fit` decided the count by measuring, which on a 1024 screen gave four
+ * columns and left the fifth card alone on a row. The shell knows how many
+ * cards it is drawing, so it says so and the row is always one row.
+ */
 .pos-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(var(--pos-metric-count, 5), minmax(0, 1fr));
+  gap: 13px;
+  margin-bottom: 16px;
 }
 
 .pos-metric {
@@ -307,8 +314,8 @@
 }
 
 /* Direction is stated in words by the component; the colour only reinforces. */
-.pos-metric__comparison--up { color: var(--success, #216f13); }
-.pos-metric__comparison--down { color: var(--danger, #aa2929); }
+.pos-metric__comparison--good { color: var(--success, #216f13); }
+.pos-metric__comparison--bad { color: var(--danger, #aa2929); }
 
 /* --------------------------------------------------------------------------
    Layout and panels
@@ -802,17 +809,1174 @@
   }
 }
 
+/* ===========================================================================
+   Business Overview
+   ===========================================================================
+
+   The command-centre layout: a hero with a quiet graphic, five headline cards
+   with their own shapes, a briefing strip, and two grids of panels.
+
+   EVERYTHING HERE IS STILL SCOPED TO .pos-workspace and still reads the same
+   tokens as the rest of the file. There is no second palette and no --bo-*
+   variable: a screen with its own colour variables is a screen that drifts
+   from the product the first time the brand green moves.
+
+   The three rules at the top of this file hold here too. Nothing is said in
+   colour alone — every tint has a word beside it. Nothing that a finger
+   presses is under 44px. Nothing animates for a viewer who asked it not to.
+   =========================================================================== */
+
 /* --------------------------------------------------------------------------
-   Combination chart and donut
+   Hero
+   -------------------------------------------------------------------------- */
+
+.pos-page-header__titles {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.pos-page-header__side {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/*
+ * The decorative mark.
+ *
+ * It is the first thing to go when the header is tight, because it says
+ * nothing: the moment it competes with the actions for room, the actions win.
+ */
+.pos-heromark {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: linear-gradient(95deg, rgba(237, 248, 233, 0.9), rgba(255, 255, 255, 0));
+}
+
+.pos-heromark p {
+  margin: 0;
+  color: #4d6357;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.pos-heromark svg { flex: 0 0 auto; }
+
+/* --------------------------------------------------------------------------
+   Switcher and filters
+   -------------------------------------------------------------------------- */
+
+.pos-dashboard-nav__item { gap: 8px; }
+
+.pos-dashboard-nav__icon {
+  display: inline-flex;
+  align-items: center;
+  color: currentColor;
+  opacity: 0.75;
+}
+
+.pos-dashboard-nav__item[aria-current='page'] .pos-dashboard-nav__icon { opacity: 1; }
+
+/*
+ * Controls on the left, freshness on the right, at every width.
+ *
+ * A grid rather than the wrapping flex row the base rule gives it, so the
+ * "Updated" line stays pinned to the right instead of being flung onto a line
+ * of its own the moment the controls need one more pixel.
+ */
+.pos-filterbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-surface);
+}
+
+/*
+ * Every control sized by what it is, not by where it sits.
+ *
+ * Fixed grid tracks broke the moment a board left a control out: Customers and
+ * Restaurant draw no Counter and no Compare, so their quick-range buttons
+ * landed in the narrow track the "To" date was supposed to have. Each control
+ * now carries its own name and its own basis, so a bar of four controls and a
+ * bar of six both come out right and neither depends on a sibling existing.
+ */
+.pos-filterbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pos-field--outlet,
+.pos-field--counter { flex: 1 1 108px; min-width: 96px; }
+
+/* A date input needs room for 09/19/2026 and its picker button. */
+.pos-field--from,
+.pos-field--to { flex: 1 1 136px; min-width: 132px; }
+
+.pos-field--compare { flex: 1 1 140px; min-width: 128px; }
+
+/* Wide enough for all four chips on one line — measured, not guessed. */
+.pos-field--range { flex: 100 1 420px; min-width: 300px; }
+
+.pos-filterbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.pos-freshness {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pos-freshness__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-freshness__dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #22a447;
+  box-shadow: 0 0 0 4px rgba(34, 164, 71, 0.1);
+}
+
+.pos-freshness__dot--stale {
+  background: var(--warning, #805500);
+  box-shadow: 0 0 0 4px rgba(128, 85, 0, 0.1);
+}
+
+.pos-freshness__dot--busy {
+  background: var(--info, #315dab);
+  box-shadow: 0 0 0 4px rgba(49, 93, 171, 0.12);
+}
+
+
+.pos-chipset {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pos-chip {
+  min-height: 44px;
+  padding: 0 11px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: #fff;
+  color: #40505c;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.pos-chip:hover { background: var(--surface-2, #f7faf8); }
+
+/*
+ * The pressed range.
+ *
+ * aria-pressed IS the state, and the styling follows it rather than a class —
+ * so the thing a screen reader announces and the thing the eye sees can never
+ * disagree.
+ */
+.pos-chip[aria-pressed='true'] {
+  border-color: #a9d3ac;
+  background: var(--pos-soft-green);
+  color: var(--pos-action);
+}
+
+.pos-iconbutton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pos-muted);
+  cursor: pointer;
+}
+
+.pos-iconbutton:hover:not(:disabled) { border-color: #bcd3c3; color: var(--pos-action); }
+.pos-iconbutton:disabled { cursor: progress; }
+
+/* A ring that turns only while something is actually in flight. */
+.pos-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.85;
+  animation: pos-spin 720ms linear infinite;
+}
+
+.pos-spinner--idle { animation: none; opacity: 0.45; }
+
+@keyframes pos-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pos-select { display: inline-flex; min-width: 0; }
+
+.pos-select select {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  border-radius: 9px;
+}
+
+@media (pointer: coarse) {
+  .pos-select select { min-height: 44px; }
+}
+
+/* --------------------------------------------------------------------------
+   Metric cards
+   -------------------------------------------------------------------------- */
+
+.pos-metric {
+  position: relative;
+  gap: 8px;
+  padding: 16px;
+  overflow: hidden;
+  border-radius: 16px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.pos-metric:hover:not(:disabled) { transform: translateY(-2px); }
+
+.pos-metric__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.pos-metric__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+}
+
+.pos-metric__icon--brand { background: var(--pos-soft-green); color: var(--pos-action); }
+.pos-metric__icon--info { background: var(--info-bg, #edf3ff); color: var(--info, #315dab); }
+.pos-metric__icon--danger { background: var(--danger-bg, #ffeded); color: var(--danger, #aa2929); }
+.pos-metric__icon--warning { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+.pos-metric__icon--neutral { background: #eef2ef; color: #526259; }
+
+.pos-metric__value { margin: 2px 0 0; }
+
+.pos-metric__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+.pos-metric__context {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.pos-metric__meter {
+  display: block;
+  width: 100%;
+  height: 7px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #e7eeea;
+  overflow: hidden;
+}
+
+.pos-metric__meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pos-action);
+  transition: width 320ms ease;
+}
+
+.pos-metric__meter-fill--warning { background: var(--warning, #805500); }
+.pos-metric__meter-fill--danger { background: var(--danger, #aa2929); }
+.pos-metric__meter-fill--info { background: var(--info, #315dab); }
+
+/*
+ * The sparkline sits behind the text, bottom-aligned and faint.
+ *
+ * `pointer-events: none` because it is decoration: a card whose hover target
+ * is a 34px picture rather than the whole card is a card that is hard to click.
+ */
+.pos-metric__spark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 34px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.pos-metric:hover .pos-metric__spark { opacity: 0.8; }
+
+.pos-spark { display: block; width: 100%; height: 100%; }
+.pos-spark__area { fill: currentColor; opacity: 0.1; }
+.pos-spark__line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pos-spark__tip { fill: currentColor; }
+.pos-spark__bar { fill: currentColor; opacity: 0.45; }
+
+.pos-spark--brand { color: var(--pos-brand); }
+.pos-spark--info { color: var(--info, #315dab); }
+.pos-spark--danger { color: var(--danger, #aa2929); }
+
+.pos-metric--placeholder {
+  cursor: default;
+  min-height: 132px;
+}
+
+/* --------------------------------------------------------------------------
+   The briefing strip
+   -------------------------------------------------------------------------- */
+
+.pos-strip {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.15fr) minmax(0, 4.4fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #bce0c7;
+  border-radius: 16px;
+  background: linear-gradient(97deg, rgba(238, 250, 241, 0.95), rgba(255, 255, 255, 0.98));
+}
+
+.pos-strip__brand { min-width: 0; }
+
+.pos-strip__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #17362a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.pos-strip__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--pos-action);
+  box-shadow: 0 1px 3px rgba(20, 60, 36, 0.12);
+}
+
+/*
+ * BETA, and it means it.
+ *
+ * POS has no model integration. The badge is here so nobody reads the panel
+ * heading as a claim that one produced these — see the note in the drawer.
+ */
+.pos-strip__beta {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #dcf3e3;
+  color: #06702e;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+}
+
+.pos-strip__context {
+  margin: 5px 0 0;
+  color: #64776b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pos-strip__quiet {
+  margin: 0;
+  color: var(--pos-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pos-strip__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(168px, 100%), 1fr));
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.pos-chipcard {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid #e3ece6;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.pos-chipcard--danger { border-color: #f0cfcf; }
+.pos-chipcard--warning { border-color: #eedfba; }
+
+.pos-chipcard__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+.pos-chipcard__icon--danger { background: var(--danger-bg, #ffeded); color: var(--danger, #aa2929); }
+.pos-chipcard__icon--warning { background: var(--warning-bg, #fff4dc); color: var(--warning, #805500); }
+.pos-chipcard__icon--success { background: var(--success-bg, #edf8e9); color: var(--success, #216f13); }
+.pos-chipcard__icon--info { background: var(--info-bg, #edf3ff); color: var(--info, #315dab); }
+
+.pos-chipcard__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pos-chipcard__body strong {
+  color: #22363f;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.pos-chipcard__metric {
+  margin-top: 3px;
+  color: #23383f;
+  font-size: 12.5px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-chipcard__body small {
+  margin-top: 2px;
+  color: #7b8a90;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.pos-strip__more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  flex: 0 0 auto;
+  border: 1px solid #b6e0c1;
+  border-radius: 10px;
+  background: #effaf2;
+  color: var(--pos-action);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.pos-strip__more:hover { background: #e3f5e9; }
+
+/* --------------------------------------------------------------------------
+   The two analytics grids
+   -------------------------------------------------------------------------- */
+
+.pos-grid-analytics,
+.pos-grid-secondary {
+  display: grid;
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pos-grid-analytics { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 0.95fr); }
+.pos-grid-secondary { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(0, 1.05fr) minmax(0, 0.72fr); }
+
+.pos-panel__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pos-panel__hint {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Outlet ranks
+   -------------------------------------------------------------------------- */
+
+.pos-ranks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pos-rank {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease;
+}
+
+.pos-rank:hover { background: var(--surface-2, #f8fbf9); }
+
+.pos-rank--active {
+  border-color: #b9dcc4;
+  background: var(--pos-soft-green);
+}
+
+.pos-rank__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pos-rank__name {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pos-rank__value {
+  flex: 0 0 auto;
+  font-size: 13.5px;
+  font-weight: 750;
+}
+
+.pos-rank__track {
+  display: block;
+  height: 9px;
+  margin: 8px 0 7px;
+  border-radius: 999px;
+  background: #eaf0ec;
+  overflow: hidden;
+}
+
+.pos-rank__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #35a95c, var(--pos-action));
+  transition: width 320ms ease;
+}
+
+.pos-rank__fill--empty { background: #d6dedb; }
+
+.pos-rank__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+
+.pos-rank__flag { display: block; margin-top: 8px; }
+
+/* --------------------------------------------------------------------------
+   The trend card's bars
+   -------------------------------------------------------------------------- */
+
+.pos-chart--interactive { position: relative; }
+.pos-chart__plot { position: relative; }
+
+.pos-chart__svg--focusable { border-radius: 10px; }
+.pos-chart__hit { fill: transparent; }
+.pos-chart__hit[data-active='true'] { fill: rgba(37, 176, 3, 0.06); }
+
+.pos-chart__bar { fill: #9ad4a9; transition: fill 160ms ease; }
+.pos-chart__bar[data-active='true'] { fill: var(--pos-action); }
+.pos-chart__bar--comparison { fill: #61727d; }
+
+.pos-legend__swatch--rule { width: 12px; height: 3px; background: #61727d; border-radius: 2px; }
+
+/*
+ * The tooltip is translated by half its own width, not by half a guess.
+ *
+ * `left` is the bar's centre as a percentage of the plot, and the transform
+ * centres the box on it at any width — which matters because this SVG is
+ * `preserveAspectRatio="none"` and its internal coordinates are not pixels.
+ */
+.pos-chart__tooltip {
+  position: absolute;
+  top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  background: #13282f;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(12, 32, 24, 0.22);
+  z-index: 2;
+}
+
+.pos-chart__tooltip strong { font-size: 11px; font-weight: 700; opacity: 0.8; }
+.pos-chart__tooltip span { font-size: 14px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.pos-chart__tooltip small { opacity: 0.75; }
+
+/* --------------------------------------------------------------------------
+   Donut
+   -------------------------------------------------------------------------- */
+
+/*
+ * Ring beside legend where there is room, ring above legend where there is not.
+ *
+ * Wrapping flex rather than a media query, because what matters is the width
+ * of THIS PANEL and not the width of the window — the same card is 480px wide
+ * on a 1920 board and 300px on a 1440 one, and a breakpoint on the viewport
+ * gets that exactly backwards.
+ */
+.pos-donut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pos-donut__ring { flex: 1 1 145px; min-width: 0; }
+.pos-donut .pos-table-wrap { flex: 1 1 195px; min-width: 0; }
+.pos-donut__ring svg { display: block; width: 100%; height: auto; max-width: 170px; margin: 0 auto; }
+
+.pos-donut__arc { transition: stroke-width 160ms ease; }
+.pos-donut__arc--a { stroke: #178a3c; }
+.pos-donut__arc--b { stroke: #2f80d8; }
+.pos-donut__arc--c { stroke: #e8a317; }
+.pos-donut__arc--d { stroke: #7c62d4; }
+.pos-donut__arc--e { stroke: #56a8a0; }
+.pos-donut__arc--f { stroke: #97a5ad; }
+
+.pos-donut__total {
+  fill: var(--pos-text);
+  font-size: 17px;
+  font-weight: 780;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-donut__caption { fill: var(--pos-muted); font-size: 9px; }
+
+.pos-donut__swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 7px;
+  border-radius: 3px;
+  vertical-align: baseline;
+}
+
+.pos-donut__swatch--a { background: #178a3c; }
+.pos-donut__swatch--b { background: #2f80d8; }
+.pos-donut__swatch--c { background: #e8a317; }
+.pos-donut__swatch--d { background: #7c62d4; }
+.pos-donut__swatch--e { background: #56a8a0; }
+.pos-donut__swatch--f { background: #97a5ad; }
+
+.pos-donut__note { display: block; font-size: 10.5px; font-weight: 400; }
+
+.pos-table--bare th,
+.pos-table--bare td { padding: 7px 8px; font-size: 12px; }
+.pos-table--bare thead th { background: transparent; }
+
+/* --------------------------------------------------------------------------
+   Heatmap
+   -------------------------------------------------------------------------- */
+
+.pos-heat { min-width: 0; overflow-x: auto; }
+
+.pos-heat__grid {
+  display: grid;
+  gap: 4px;
+  align-items: center;
+  min-width: 260px;
+}
+
+.pos-heat__col,
+.pos-heat__row {
+  color: var(--pos-muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.pos-heat__row { text-align: left; padding-right: 6px; }
+
+.pos-heat__cell {
+  display: block;
+  width: 100%;
+  min-height: 17px;
+  border: 0;
+  border-radius: 4px;
+  background: #f1f6f3;
+}
+
+.pos-heat__cell--action { cursor: pointer; padding: 0; }
+.pos-heat__cell--action:disabled { cursor: default; }
+.pos-heat__cell--legend { width: 15px; min-height: 12px; flex: 0 0 auto; }
+
+.pos-heat__cell[data-level='1'] { background: #dcf0e2; }
+.pos-heat__cell[data-level='2'] { background: #bee4c9; }
+.pos-heat__cell[data-level='3'] { background: #8fd0a0; }
+.pos-heat__cell[data-level='4'] { background: #53b870; }
+.pos-heat__cell[data-level='5'] { background: #17913f; }
+
+.pos-heat__scale {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 12px;
+  color: var(--pos-muted);
+  font-size: 10.5px;
+}
+
+/* --------------------------------------------------------------------------
+   Quick actions
+   -------------------------------------------------------------------------- */
+
+.pos-quickactions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.pos-quickaction {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--pos-border);
+  border-radius: 11px;
+  background: var(--surface-2, #f8fbf9);
+  color: #2f4650;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.pos-quickaction:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #c3dbcc;
+  background: #f0f8f2;
+}
+
+.pos-quickaction:disabled { opacity: 0.6; cursor: not-allowed; }
+.pos-quickaction span { min-width: 0; }
+
+.pos-quickaction--alert {
+  border-color: #eed3b7;
+  background: #fff8ee;
+  color: #7a4f10;
+}
+
+.pos-quickaction--alert:hover { background: #fdf2e2; border-color: #e7c39c; }
+
+.pos-quickaction__count {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--warning-bg, #fff4dc);
+  color: var(--warning, #805500);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pos-button--flagged { border-color: #e7c8a6; }
+
+/*
+ * The pulse, and the one thing it is spent on.
+ *
+ * Only a danger-severity alert gets it, and it stops after three beats rather
+ * than throbbing at a manager all morning. The count beside it is the actual
+ * message; this only decides whether the eye goes there first. The
+ * reduced-motion rule at the foot of this file switches it off entirely, and
+ * the badge still says the number.
+ */
+.pos-button--urgent .pos-button__count {
+  background: var(--danger-bg, #ffeded);
+  color: var(--danger, #aa2929);
+  animation: pos-pulse 1.5s ease-out 3;
+}
+
+@keyframes pos-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(170, 41, 41, 0); }
+  35% { box-shadow: 0 0 0 5px rgba(170, 41, 41, 0.18); }
+}
+
+.pos-button__count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warning-bg, #fff4dc);
+  color: var(--warning, #805500);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------------------------
+   Drawer
+   -------------------------------------------------------------------------- */
+
+/*
+ * Above everything, including the app launcher.
+ *
+ * The launcher sits at z-index 1000 so its menu clears the page; a modal that
+ * sat under it put the launcher's button exactly where this drawer's close
+ * button is, and the drawer could be closed only with Escape.
+ */
+.pos-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pos-drawer__scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(14, 33, 24, 0.38);
+  cursor: pointer;
+  animation: pos-fade 180ms ease;
+}
+
+.pos-drawer__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  max-height: 100%;
+  background: var(--pos-surface);
+  box-shadow: -12px 0 40px rgba(12, 32, 24, 0.18);
+  animation: pos-slide-in 200ms ease;
+}
+
+.pos-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #edf1ee;
+}
+
+.pos-drawer__header h2 { font-size: 17px; }
+.pos-drawer__header p { margin: 5px 0 0; font-size: 12.5px; }
+
+.pos-drawer__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pos-muted);
+  cursor: pointer;
+}
+
+.pos-drawer__close:hover { color: var(--pos-text); border-color: #c4d4cb; }
+
+.pos-drawer__body {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.pos-drawer__body h3:first-child { margin-top: 0; }
+
+.pos-drawer__footer {
+  padding: 14px 20px;
+  border-top: 1px solid #edf1ee;
+  background: var(--surface-2, #fbfcfb);
+}
+
+.pos-drawer__footer .pos-button { width: 100%; }
+
+@keyframes pos-fade {
+  from { opacity: 0; }
+}
+
+@keyframes pos-slide-in {
+  from { transform: translateX(22px); opacity: 0.4; }
+}
+
+/* --------------------------------------------------------------------------
+   Skeletons, panel errors, empty state
+   -------------------------------------------------------------------------- */
+
+.pos-skeleton {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 11px;
+  width: 100%;
+  padding: 16px;
+}
+
+.pos-skeleton__line {
+  display: block;
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef2ef 25%, #f7faf8 50%, #eef2ef 75%);
+  background-size: 260% 100%;
+  animation: pos-shimmer 1.35s ease-in-out infinite;
+}
+
+.pos-skeleton__line:first-child { width: 55%; }
+.pos-skeleton__line:last-child { width: 78%; }
+
+@keyframes pos-shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -130% 0; }
+}
+
+.pos-panel--placeholder { min-height: 220px; justify-content: center; }
+.pos-skeleton-block {
+  min-height: 84px;
+  margin-bottom: 16px;
+  border: 1px solid var(--pos-border);
+  border-radius: 16px;
+  background: var(--pos-surface);
+}
+
+.pos-panel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #f0d4d4;
+  border-radius: 12px;
+  background: #fff8f8;
+}
+
+.pos-panel-error strong { font-size: 13px; }
+.pos-panel-error p { margin: 0; color: var(--pos-muted); font-size: 12.5px; line-height: 1.5; }
+
+.pos-state--empty { padding: 48px 24px; }
+.pos-state__mark { display: block; margin-bottom: 4px; }
+.pos-state--empty p { max-width: 460px; margin: 0 auto; }
+
+.pos-actions--centred { justify-content: center; margin-top: 18px; }
+
+/* --------------------------------------------------------------------------
+   Small shared bits
+   -------------------------------------------------------------------------- */
+
+.pos-table--compact th,
+.pos-table--compact td { padding: 9px 10px; font-size: 12px; }
+
+/*
+ * Row headers wrap; column headers do not.
+ *
+ * `.pos-table th` is nowrap so a column heading never breaks mid-phrase, but
+ * that also caught the row headers, and "Customer changed their mind" in a
+ * 240px panel then pushed the value column out of sight behind a scrollbar.
+ * The heading of a row is content, and content wraps.
+ */
+.pos-table--compact tbody th,
+.pos-table--bare tbody th {
+  white-space: normal;
+  /* `break-word`, never `anywhere`: `anywhere` breaks inside a word and turns
+     "Chicken Biryani" into four lines of syllables in a 90px column. */
+  overflow-wrap: break-word;
+}
+
+/*
+ * Figures take the width they need and no more.
+ *
+ * `width: 1%` on a table cell is the old trick for "shrink to content": the
+ * browser satisfies it as far as the content allows, which leaves every
+ * remaining pixel to the one column that has prose in it.
+ */
+.pos-table--compact td.is-number,
+.pos-table--compact th.is-number,
+.pos-table--bare td.is-number,
+.pos-table--bare th.is-number,
+.pos-table--compact .pos-table__rank {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.pos-table--compact thead th { font-size: 10.5px; }
+
+.pos-table--compact tfoot th,
+.pos-table--compact tfoot td {
+  border-top: 1px solid var(--pos-border);
+  border-bottom: 0;
+  color: var(--pos-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.pos-table__rank {
+  width: 26px;
+  color: var(--pos-muted);
+  font-weight: 700;
+  text-align: left;
+}
+
+.pos-negative { color: var(--danger, #aa2929); font-weight: 650; }
+.pos-margin { margin-top: 16px; }
+
+.pos-table--compact tbody th .pos-badge {
+  display: inline-flex;
+  margin-top: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------------------
+
+   The board is re-laid out at each step, not shrunk. Four panels across at
+   1440 and four panels across at 1024 would be four unreadable panels, so the
+   grids drop to two and then to one, and the KPI row goes 5 / 3 / 2 / 1.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .pos-strip { grid-template-columns: minmax(210px, 1fr) minmax(0, 2.6fr); }
+  .pos-strip__more { grid-column: 2; justify-self: start; }
+}
+
+@media (max-width: 1520px) {
+  .pos-grid-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1250px) {
+  .pos-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pos-field--range { flex-basis: 100%; }
+  .pos-grid-analytics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The trend is the widest thing on the board and keeps the full row. */
+  .pos-grid-analytics > :first-child { grid-column: span 2; }
+  .pos-heromark { display: none; }
+}
+
+@media (max-width: 1024px) {
+  .pos-filterbar { grid-template-columns: minmax(0, 1fr); }
+  .pos-filterbar__meta { justify-content: flex-end; }
+  .pos-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 820px) {
+  .pos-page-header__side { width: 100%; justify-content: flex-start; }
+  .pos-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .pos-grid-analytics,
+  .pos-grid-secondary { grid-template-columns: minmax(0, 1fr); }
+  .pos-grid-analytics > :first-child { grid-column: auto; }
+  .pos-strip { grid-template-columns: minmax(0, 1fr); }
+  .pos-strip__more { grid-column: auto; width: 100%; }
+  .pos-donut { grid-template-columns: minmax(0, 1fr); }
+  .pos-drawer__panel { width: 100%; }
+}
+
+@media (max-width: 560px) {
+  .pos-metrics { grid-template-columns: minmax(0, 1fr) !important; }
+  .pos-field--range,
+  .pos-field--outlet,
+  .pos-field--counter,
+  .pos-field--from,
+  .pos-field--to,
+  .pos-field--compare { flex: 1 1 100%; min-width: 0; }
+  .pos-strip__items { grid-template-columns: minmax(0, 1fr); }
+  .pos-chipset { width: 100%; }
+  .pos-chip { flex: 1 1 auto; }
+  .pos-metric__spark { opacity: 0.4; }
+}
+
+/*
+ * Reduced motion.
+ *
+ * The rule at the top of this file kills transitions and animations inside
+ * .pos-workspace. The drawer is `position: fixed` but still a descendant of the
+ * workspace, so it is covered — the panel appears rather than sliding, which is
+ * the correct behaviour and not a missing feature.
+ */
+
+/* --------------------------------------------------------------------------
+   Combination chart, and the bare ring the returns register uses
    -------------------------------------------------------------------------- */
 
 .pos-chart__bar--soft { fill: #cfc7ff; }
 .pos-chart__line--accent { stroke: #7448ea; }
 .pos-chart__point--accent { fill: #7448ea; }
 
-.pos-donut { display: grid; gap: 10px; min-width: 0; }
+.pos-ring { display: grid; gap: 10px; min-width: 0; }
 
-.pos-donut__ring {
+.pos-ring__svg {
   display: block;
   width: 100%;
   max-width: 148px;
@@ -820,14 +1984,14 @@
   margin: 0 auto;
 }
 
-.pos-donut__figure {
+.pos-ring__figure {
   fill: var(--pos-text);
   font-size: 25px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
 
-.pos-donut__caption {
+.pos-ring__caption {
   fill: var(--pos-muted);
   font-size: 10px;
 }

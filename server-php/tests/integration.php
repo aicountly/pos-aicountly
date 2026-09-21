@@ -1853,20 +1853,88 @@ check('the overview computes each shared aggregate once, not once per panel', fu
     $board = new OverviewBoard(dashboardWindow($ctx, $auth));
     $built = $board->build();
 
-    // The daily brief reads the same counts the KPI cards and the attention list
-    // show. Each of those is an aggregate over pos_carts, and computing them per
-    // panel meant three passes to draw one screen.
+    // The briefing strip reads the same counts the KPI cards, the attention list
+    // and the panels show. Each of those is an aggregate over pos_carts, and
+    // computing them per panel meant several passes to draw one screen — the
+    // rules that read a panel back (peak hour reads the series, the returns rule
+    // reads the reason breakdown, the counter rule reads the till totals) would
+    // each have re-run their query without this.
     $memo = new \ReflectionProperty(OverviewBoard::class, 'memo');
     $memo->setAccessible(true);
     $cached = array_keys($memo->getValue($board));
     sort($cached);
-    assertSame(['attention', 'comparison', 'sales'], $cached, 'the shared aggregates are computed once each');
+    assertSame(
+        ['attention', 'comparison', 'counters', 'outlets', 'returns_voids', 'sales', 'series', 'top_items'],
+        $cached,
+        'the shared aggregates are computed once each',
+    );
 
     // And the panels that read them agree, which is the point of computing once:
     // three separate passes could straddle a write and disagree.
     assertSame(1, $built['sales']['bills'], 'the KPI row');
     assertSame(0, $built['attention']['posting_failed'], 'the attention panel');
     assertTrue($built['insights']['sufficient_data'], 'and the brief built from the same counts');
+});
+
+check('the overview keeps a return and a void apart, and does not call a void money', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 500.0);
+
+    $paid = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CheckoutService($ctx, $auth))->checkout((int) $paid['cart_id'], [
+        'payments' => [['payment_mode' => 'cash', 'amount' => (float) $paid['total_amount']]],
+    ]);
+
+    $voided = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CartService($ctx, $auth))->void((int) $voided['cart_id'], ['reason' => 'billing_error']);
+
+    (new ReturnService($ctx, $auth))->create([
+        'cart_id'     => (int) $paid['cart_id'],
+        'session_id'  => $sessionId,
+        'resolution'  => 'refund_cash',
+        'reason_code' => 'quality_issue',
+        'lines' => [['item_id' => 101, 'return_qty' => 1, 'rate' => 120, 'display_name' => 'Stub item 101', 'warehouse_id' => 3]],
+    ]);
+
+    $board = (new OverviewBoard(dashboardWindow($ctx, $auth)))->build();
+    $split = $board['returns_voids'];
+
+    assertSame(1, count($split['returns']), 'one return reason');
+    assertSame('quality_issue', $split['returns'][0]['reason'], 'the reason the cashier gave');
+    assertSame('Quality issue', $split['returns'][0]['display_name'], 'said the way a cashier would say it');
+    assertTrue($split['returns'][0]['amount_is_money'], 'a refund is money that moved');
+
+    assertSame(1, count($split['voids']), 'one void reason');
+    assertSame('billing_error', $split['voids'][0]['reason'], 'the void reason is kept, not merged into the returns');
+    // THE POINT OF THE WHOLE BLOCK. A void cancelled a bill that was never
+    // taken, so its value sizes the bill and is not money that went back. A
+    // screen that totalled the two columns would report a refund figure that
+    // reconciles against nothing.
+    assertTrue($split['voids'][0]['amount_is_money'] === false, 'a void is not money that moved');
+
+    assertSame(1, $split['totals']['returns_count'], 'returns are totalled on their own');
+    assertSame(1, $split['totals']['voids_count'], 'and voids on their own');
+});
+
+check('the heatmap puts a sale in the hour of the clock and the day of the trading', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 500.0);
+    $cart = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CheckoutService($ctx, $auth))->checkout((int) $cart['cart_id'], [
+        'payments' => [['payment_mode' => 'cash', 'amount' => (float) $cart['total_amount']]],
+    ]);
+
+    $board = (new OverviewBoard(dashboardWindow($ctx, $auth)))->build();
+    $cells = $board['activity']['cells'];
+
+    assertSame(1, count($cells), 'one sale, one cell');
+    assertSame(1, $cells[0]['bills'], 'counted once');
+
+    $expected = new \DateTimeImmutable('now', new \DateTimeZone($board['activity']['timezone']));
+    assertSame((int) $expected->format('H'), $cells[0]['hour'], 'the hour is the outlet\'s own wall clock');
+    assertSame((int) $expected->format('N'), $cells[0]['dow'], 'and the day is ISO, Monday first');
 });
 
 check('an outlet id belonging to another company is a 404, not an empty board', function () use ($ctx, $auth) {
