@@ -24,6 +24,11 @@ namespace Aicountly\Api;
  */
 final class Auth
 {
+    /** Lazily-fetched portal profile, cached for the life of this instance. */
+    private bool $profileFetched = false;
+    /** @var array<string, mixed>|null */
+    private ?array $profileCache = null;
+
     private function __construct(
         public readonly string $uuid,
         public readonly string $kind,      // 'user' | 'service'
@@ -163,7 +168,38 @@ final class Auth
             }
         }
 
+        // `validatesession` answered with no name at all — the same gap Smart
+        // Books hits for its own header, and closes by reading the portal's
+        // profile endpoint instead of the bare session. Same call, same field
+        // order, so this shows the same name Books would show this person.
+        $profile = $this->profile();
+        if ($profile !== null) {
+            foreach (['full_name', 'first_name', 'user_firstname', 'email', 'reg_email'] as $field) {
+                $value = $profile[$field] ?? null;
+                if (is_string($value) && trim($value) !== '') {
+                    return trim($value);
+                }
+            }
+        }
+
         return $this->uuid;
+    }
+
+    /**
+     * The portal's profile answer for this session, fetched once and kept for
+     * the rest of the request — never more than the one extra round trip
+     * `displayName()` needs when the session itself carries no name.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function profile(): ?array
+    {
+        if (!$this->profileFetched) {
+            $this->profileFetched = true;
+            $this->profileCache = $this->sesKey !== '' ? Portal::fetchUserProfile($this->sesKey) : null;
+        }
+
+        return $this->profileCache;
     }
 
     private static function bearer(): string

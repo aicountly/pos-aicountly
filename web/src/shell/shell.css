@@ -168,12 +168,6 @@
   cursor: pointer;
 }
 
-.shell-fy {
-  color: var(--muted);
-  font-size: 12.5px;
-  white-space: nowrap;
-}
-
 .shell-connection {
   display: flex;
   align-items: center;

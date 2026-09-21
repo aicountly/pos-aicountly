@@ -309,7 +309,7 @@ function SignedInAs() {
 
 export function AppShell() {
   const { signOut } = useAuth()
-  const { session, can, scope } = usePos()
+  const { session, can } = usePos()
   const [navOpen, setNavOpen] = useState(false)
 
   const modes = useMemo(
@@ -390,7 +390,6 @@ export function AppShell() {
 
           <div className="shell-header__right">
             <ConnectionState />
-            {scope && <span className="shell-fy num">FY {scope.fy_id}</span>}
             <AppLauncher />
             <SignedInAs />
           </div>

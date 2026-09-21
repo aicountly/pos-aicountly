@@ -106,4 +106,40 @@ final class Portal
 
         return $data;
     }
+
+    /**
+     * The signed-in user's profile — name, email, mobile.
+     *
+     * `validatesession` answers a security question ("is this key live") and
+     * carries little else. A person's name lives here instead, on the same
+     * endpoint Smart Books reads for its own header — so a name resolved
+     * through this call is the same name Books shows for that person.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function fetchUserProfile(string $sesKey): ?array
+    {
+        $result = self::forward('GET', 'userprofile', [
+            'Authorization: Bearer ' . $sesKey,
+            'Content-Type: application/json',
+        ], '');
+
+        if ($result['status'] !== 200 || $result['body'] === '') {
+            return null;
+        }
+
+        $data = json_decode($result['body'], true);
+        if (!is_array($data)) {
+            return null;
+        }
+
+        if (isset($data['data']) && is_array($data['data'])) {
+            return $data['data'];
+        }
+        if (isset($data['user']) && is_array($data['user'])) {
+            return $data['user'];
+        }
+
+        return $data;
+    }
 }
