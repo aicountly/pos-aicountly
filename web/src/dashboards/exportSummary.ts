@@ -1,5 +1,5 @@
 /**
- * The Business Overview, as a spreadsheet.
+ * The dashboards, as spreadsheets.
  *
  * EXACTLY WHAT IS ON THE SCREEN, AND NOTHING THAT IS NOT. The file is built
  * from the board object the page is already rendering, so there is no second
@@ -14,7 +14,7 @@
  * Sheets and in Books.
  */
 
-import type { OverviewBoard } from './types'
+import type { ControlsBoard, OverviewBoard } from './types'
 import type { DashboardFilters } from './useDashboard'
 
 /** One CSV field. Quotes are doubled, and anything risky is quoted. */
@@ -133,6 +133,127 @@ export function downloadOverviewCsv(board: OverviewBoard, filters: DashboardFilt
 
   anchor.href = url
   anchor.download = `aicountly-pos-overview-${board.window.from}-to-${board.window.to}.csv`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+
+// ---------------------------------------------------------------------------
+// Cash, Shifts & Controls
+// ---------------------------------------------------------------------------
+
+/**
+ * The close-out, as a spreadsheet.
+ *
+ * Same contract as the overview above: built from the board the page is already
+ * rendering, so the file cannot disagree with the screen it came from, and the
+ * window, outlet and counter are written into its head because a variance
+ * without its filters is a variance somebody will argue about in a month.
+ *
+ * Counted cash and variance are written as blanks where the server sent null.
+ * A zero would say a drawer nobody has opened balances.
+ */
+export function buildControlsCsv(board: ControlsBoard, filters: DashboardFilters): string {
+  const lines: string[] = []
+
+  lines.push(row('Aicountly POS — Cash, Shifts & Controls'))
+  lines.push(row('From', board.window.from, 'To', board.window.to))
+  lines.push(row('Timezone', board.window.timezone, 'Day starts at (minutes)', board.window.day_start_minutes))
+  lines.push(row('Outlet', filters.locationId === null ? 'All outlets' : String(filters.locationId)))
+  lines.push(row('Counter', filters.terminalId === null ? 'All counters' : String(filters.terminalId)))
+  lines.push(row('Generated at', board.window.generated_at))
+  lines.push(row('Scope', board.window.scope_note))
+  lines.push('')
+
+  lines.push(row('The drawer'))
+  lines.push(row('Measure', 'Amount'))
+  lines.push(row('Opening float', board.cash.opening_float))
+  lines.push(row('Cash taken on sales', board.cash.cash_sales))
+  lines.push(row('Cash paid in', board.cash.cash_in))
+  lines.push(row('Cash refunds', board.cash.cash_refunds))
+  lines.push(row('Cash paid out', board.cash.cash_payouts))
+  lines.push(row('Safe drops', board.cash.cash_drops))
+  lines.push(row('Expected cash', board.cash.expected_cash))
+  lines.push(row('Counted cash', board.cash.counted_cash ?? ''))
+  lines.push(row('Variance', board.cash.variance ?? ''))
+  lines.push(row('Shifts', board.cash.shifts, 'Counted', board.cash.counted_shifts, 'Still open', board.cash.open_shifts))
+  lines.push(row('Basis', board.formula.expected_cash))
+  lines.push('')
+
+  lines.push(row('Shifts'))
+  lines.push(
+    row('Shift', 'Status', 'Review', 'Counter', 'Outlet', 'Opened by', 'Opened at', 'Closed at',
+      'Opening float', 'Expected', 'Counted', 'Variance', 'Reason', 'Bills', 'Net'),
+  )
+  for (const shift of board.shifts) {
+    lines.push(
+      row(
+        shift.session_id,
+        shift.status,
+        shift.review_state,
+        shift.terminal_name ?? shift.terminal_code ?? '',
+        shift.location_name ?? '',
+        shift.opened_by,
+        shift.opened_at,
+        shift.closed_at ?? '',
+        shift.opening_float,
+        shift.expected_cash,
+        shift.counted_cash ?? '',
+        shift.variance ?? '',
+        shift.variance_reason ?? '',
+        shift.bills,
+        shift.net,
+      ),
+    )
+  }
+  lines.push('')
+
+  lines.push(row('Payment modes'))
+  lines.push(row('Mode', 'Amount', 'Tenders', 'Settlement', 'Evidence'))
+  for (const line of board.tenders.lines) {
+    lines.push(row(line.display_name, line.amount, line.count, line.settlement_label, line.evidence))
+  }
+  lines.push(row(board.tenders.provider.note))
+  lines.push('')
+
+  lines.push(row('Cash movements'))
+  lines.push(row('Event', 'When', 'What', 'Direction', 'Amount', 'Counter', 'By', 'Approved by', 'Reason'))
+  for (const movement of board.movements) {
+    lines.push(
+      row(
+        movement.event_id,
+        movement.created_at,
+        movement.label,
+        movement.direction,
+        movement.amount,
+        movement.terminal_code ?? '',
+        movement.actor_uuid,
+        movement.approved_by ?? '',
+        movement.reason ?? '',
+      ),
+    )
+  }
+  lines.push('')
+
+  lines.push(row('Approvals'))
+  lines.push(row('What', 'Recorded', 'Unsigned'))
+  for (const approval of board.approvals.summary) {
+    lines.push(row(approval.display_name, approval.count, approval.unapproved))
+  }
+
+  return lines.join('\r\n')
+}
+
+export function downloadControlsCsv(board: ControlsBoard, filters: DashboardFilters): void {
+  // The BOM is what makes Excel on Windows read ₹ correctly instead of mojibake.
+  const blob = new Blob(['\ufeff', buildControlsCsv(board, filters)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+
+  anchor.href = url
+  anchor.download = `aicountly-pos-cash-controls-${board.window.from}-to-${board.window.to}.csv`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()

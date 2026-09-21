@@ -573,6 +573,35 @@ export interface DashboardTab {
   icon?: ReactNode
 }
 
+/**
+ * The switcher between the five boards.
+ *
+ * Extracted so a board that lays its own page out — Controls does — keeps the
+ * same switcher rather than drawing a second one that drifts away from it. The
+ * shell below renders this; nothing about the markup changed.
+ */
+export function DashboardTabs({ tabs, active }: { tabs: DashboardTab[]; active: string }) {
+  return (
+    <nav className="pos-dashboard-nav" aria-label="POS dashboards">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.id}
+          to={tab.path}
+          className="pos-dashboard-nav__item"
+          aria-current={active === tab.id ? 'page' : undefined}
+        >
+          {tab.icon && (
+            <span className="pos-dashboard-nav__icon" aria-hidden>
+              {tab.icon}
+            </span>
+          )}
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
 export function PosDashboardShell({
   title,
   description,
@@ -664,23 +693,7 @@ export function PosDashboardShell({
 
       {contextControls && <div className="pos-context">{contextControls}</div>}
 
-      <nav className="pos-dashboard-nav" aria-label="POS dashboards">
-        {visibleTabs.map((tab) => (
-          <Link
-            key={tab.id}
-            to={tab.path}
-            className="pos-dashboard-nav__item"
-            aria-current={activeDashboard === tab.id ? 'page' : undefined}
-          >
-            {tab.icon && (
-              <span className="pos-dashboard-nav__icon" aria-hidden>
-                {tab.icon}
-              </span>
-            )}
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <DashboardTabs tabs={visibleTabs} active={activeDashboard} />
 
       <div className="pos-filterbar">
         <div className="pos-filterbar__controls">{filterControls}</div>
