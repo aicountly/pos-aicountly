@@ -99,14 +99,21 @@ export function compare(
   current: number,
   previous: number | null | undefined,
   label: string | null | undefined,
-): { label: string; direction: 'up' | 'down' | 'flat' } | null {
+): { label: string; short: string; direction: 'up' | 'down' | 'flat' } | null {
   if (previous === null || previous === undefined || !Number.isFinite(previous) || previous === 0) return null
 
   const change = ((current - previous) / previous) * 100
   const direction = Math.abs(change) < 0.5 ? 'flat' : change > 0 ? 'up' : 'down'
   const words = direction === 'flat' ? 'about the same' : `${direction === 'up' ? 'up' : 'down'} ${percent(Math.abs(change), 0)}`
 
-  return { label: `${words} ${label ?? 'vs the comparison period'}`, direction }
+  return {
+    label: `${words} ${label ?? 'vs the comparison period'}`,
+    // The chip on a KPI card has room for a figure, not a sentence. The
+    // sentence is still what a screen reader is given, and still what the
+    // panels that have room for it print.
+    short: direction === 'flat' ? 'level' : percent(Math.abs(change), 0),
+    direction,
+  }
 }
 
 /** A person's uuid, shortened for a table cell without pretending it is a name. */
@@ -114,6 +121,24 @@ export function actor(uuid: string | null | undefined): string {
   if (!uuid) return '—'
 
   return uuid.length > 14 ? `${uuid.slice(0, 8)}…` : uuid
+}
+
+/** "18 Sep 2026" — the absolute date, with no time on it. */
+export function dateOnly(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+
+  return date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+/** How many whole days ago, or null when there is no date to measure from. */
+export function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return null
+
+  return Math.max(0, Math.floor((Date.now() - then) / 86400000))
 }
 
 export function titleCase(value: string): string {

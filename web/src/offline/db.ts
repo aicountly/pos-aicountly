@@ -58,7 +58,34 @@ export interface OutboxSale {
   queuedAt: number
   attempts: number
   lastError: string | null
-  status: 'QUEUED' | 'SENDING' | 'DONE' | 'CONFLICT'
+  /**
+   * QUEUED       this till still owes the server this sale.
+   * SENDING      in flight right now.
+   * DONE         legacy; nothing writes it any more.
+   * CONFLICT     the server refused it and a person has to act.
+   * ACKNOWLEDGED the server HAS it (RECEIVED/CONFLICT/ABANDONED on its side),
+   *              so this device is no longer the one that has to deliver it.
+   *              The payload stays here anyway until it posts — belt and
+   *              braces, because the cost of keeping it is a few kilobytes and
+   *              the cost of being wrong is a lost sale.
+   */
+  status: 'QUEUED' | 'SENDING' | 'DONE' | 'CONFLICT' | 'ACKNOWLEDGED'
+
+  // ---------------------------------------------------------------------
+  // Added after the first release, so every one of these is OPTIONAL: rows
+  // written by an older build are already sitting in people's browsers and
+  // must keep reading back cleanly. Nothing here is sent either — see
+  // toPayload() in sync.ts, which strips the lot.
+  // ---------------------------------------------------------------------
+
+  /** When the last send was attempted, for the backoff and for the drawer. */
+  lastAttemptAt?: number | null
+  /** A machine-readable hint for the failure, used to explain it in words. */
+  lastErrorCode?: string | null
+  /** The server's own id for this sale, kept once it acknowledges. */
+  serverReference?: number | null
+  /** When the server said it had it. */
+  serverAcknowledgedAt?: string | null
 }
 
 export interface OutboxLine {
@@ -174,6 +201,15 @@ export async function outboxAll(): Promise<OutboxSale[]> {
 
 export async function outboxPending(): Promise<OutboxSale[]> {
   return (await outboxAll()).filter((s) => s.status === 'QUEUED' || s.status === 'SENDING')
+}
+
+export async function outboxGet(clientUuid: string): Promise<OutboxSale | null> {
+  try {
+    const row = await run<OutboxSale | undefined>(STORE_OUTBOX, 'readonly', (s) => s.get(clientUuid))
+    return row ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function outboxUpdate(clientUuid: string, patch: Partial<OutboxSale>): Promise<void> {

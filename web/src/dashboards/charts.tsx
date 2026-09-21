@@ -49,12 +49,23 @@ export function TrendChart({
   width = 640,
   tableVisible = false,
   caption,
+  secondary = 'comparison',
 }: {
   points: SeriesPoint[]
   valueLabel: string
   comparisonLabel?: string | null
   format: (value: number) => string
   height?: number
+  /**
+   * What the second line is.
+   *
+   * `comparison` is the same measure in an earlier window — grey, dashed,
+   * visibly subordinate. `series` is a measure in its own right, like new
+   * customers beside returning ones, and is drawn as a peer: its own colour,
+   * its own markers, its own area. Both stay distinguishable without colour,
+   * which is why the peer series is dashed too, at a different rhythm.
+   */
+  secondary?: 'comparison' | 'series'
   /**
    * The viewBox width. The SVG is drawn with preserveAspectRatio="none" so it
    * fills its panel, which stretches the axis text by whatever the panel and
@@ -83,10 +94,13 @@ export function TrendChart({
   const y = (v: number) => pad.top + innerH - (v / max) * innerH
 
   const line = points.map((p, i) => ({ x: x(i), y: y(p.value) }))
-  const area = `${path(line)} L${x(points.length - 1).toFixed(1)},${(pad.top + innerH).toFixed(1)} L${x(0).toFixed(1)},${(pad.top + innerH).toFixed(1)} Z`
-  const comparisonLine = hasComparison
-    ? path(points.map((p, i) => ({ x: x(i), y: y(p.comparison ?? 0) })))
-    : null
+  const close = (d: string) =>
+    `${d} L${x(points.length - 1).toFixed(1)},${(pad.top + innerH).toFixed(1)} L${x(0).toFixed(1)},${(pad.top + innerH).toFixed(1)} Z`
+  const area = close(path(line))
+
+  const secondLine = hasComparison ? points.map((p, i) => ({ x: x(i), y: y(p.comparison ?? 0) })) : null
+  const comparisonLine = secondLine ? path(secondLine) : null
+  const isPeer = secondary === 'series'
 
   const ticks = tickIndexes(points.length)
 
@@ -105,7 +119,15 @@ export function TrendChart({
         ))}
 
         <path className="pos-chart__area" d={area} />
-        {comparisonLine && <path className="pos-chart__line pos-chart__line--comparison" d={comparisonLine} />}
+        {isPeer && comparisonLine && (
+          <path className="pos-chart__area pos-chart__area--secondary" d={close(comparisonLine)} />
+        )}
+        {comparisonLine && (
+          <path
+            className={`pos-chart__line ${isPeer ? 'pos-chart__line--secondary' : 'pos-chart__line--comparison'}`}
+            d={comparisonLine}
+          />
+        )}
         <path className="pos-chart__line" d={path(line)} />
 
         {points.length <= 32 &&
@@ -115,6 +137,16 @@ export function TrendChart({
                   data; this saves a reader crossing to it for one point. */}
               <title>
                 {points[i].label}: {format(points[i].value)}
+              </title>
+            </circle>
+          ))}
+        {isPeer &&
+          secondLine &&
+          points.length <= 32 &&
+          secondLine.map((p, i) => (
+            <circle key={`s${i}`} className="pos-chart__point pos-chart__point--secondary" cx={p.x} cy={p.y} r={2.5}>
+              <title>
+                {points[i].label}: {format(points[i].comparison ?? 0)}
               </title>
             </circle>
           ))}
@@ -132,7 +164,11 @@ export function TrendChart({
         </span>
         {hasComparison && comparisonLabel && (
           <span className="pos-legend__item">
-            <span className="pos-legend__swatch pos-legend__swatch--comparison" aria-hidden /> {comparisonLabel}
+            <span
+              className={`pos-legend__swatch ${isPeer ? 'pos-legend__swatch--secondary' : 'pos-legend__swatch--comparison'}`}
+              aria-hidden
+            />{' '}
+            {comparisonLabel}
           </span>
         )}
       </div>
@@ -835,12 +871,25 @@ export function DonutChart({
   centreLabel,
   emptyLabel = 'Nothing recorded in this period.',
   caption,
+  labelHeader = 'Method',
+  centreFormat,
 }: {
   slices: DonutSlice[]
   format: (value: number) => string
   centreLabel: string
   emptyLabel?: string
   caption: string
+  /** What the legend's first column is a list of. Tenders, by default. */
+  labelHeader?: string
+  /**
+   * How the total in the middle is written, when that differs from the legend.
+   *
+   * The centre is a headline and the legend is a real table, so they do not
+   * always want the same formatter: ₹35.6L reads in the middle of a ring, and
+   * `compactMoney` is documented as never belonging in a table. Defaults to
+   * `format`, which is what the tender mix wants.
+   */
+  centreFormat?: (value: number) => string
 }) {
   const titleId = useId()
   const usable = slices.filter((slice) => slice.value > 0)
@@ -884,7 +933,7 @@ export function DonutChart({
             />
           ))}
           <text className="pos-donut__total" x={centre} y={centre - 1} textAnchor="middle">
-            {format(total)}
+            {(centreFormat ?? format)(total)}
           </text>
           <text className="pos-donut__caption" x={centre} y={centre + 15} textAnchor="middle">
             {centreLabel}
@@ -897,7 +946,7 @@ export function DonutChart({
           <caption className="pos-visually-hidden">{caption}</caption>
           <thead>
             <tr>
-              <th scope="col">Method</th>
+              <th scope="col">{labelHeader}</th>
               <th scope="col" className="is-number">Share</th>
               <th scope="col" className="is-number">Value</th>
             </tr>

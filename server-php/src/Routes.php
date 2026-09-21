@@ -170,6 +170,7 @@ final class Routes
         $router->get('v1/dashboards/retail', [DashboardController::class, 'retail']);
         $router->get('v1/dashboards/restaurant', [DashboardController::class, 'restaurant']);
         $router->get('v1/dashboards/customers', [DashboardController::class, 'customers']);
+        $router->get('v1/dashboards/customers/directory', [DashboardController::class, 'customerDirectory']);
         $router->get('v1/dashboards/controls', [DashboardController::class, 'controls']);
 
         // The Shift Report — one shift, in one response. The two lists that

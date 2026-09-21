@@ -9,6 +9,8 @@ use Aicountly\Api\Auth;
 use Aicountly\Api\Context;
 use Aicountly\Api\Db;
 use Aicountly\Api\Domain\Dashboards\ControlsBoard;
+use Aicountly\Api\Domain\Dashboards\CustomerDirectory;
+use Aicountly\Api\Domain\Dashboards\CustomerRules;
 use Aicountly\Api\Domain\Dashboards\CustomersBoard;
 use Aicountly\Api\Domain\Dashboards\OverviewBoard;
 use Aicountly\Api\Domain\Dashboards\RestaurantBoard;
@@ -204,6 +206,49 @@ final class DashboardController extends Controller
         Permissions::assert($ctx, $auth, 'reports.view');
 
         Http::data((new CustomersBoard(Window::fromRequest($ctx, $auth)))->build());
+    }
+
+    /**
+     * The customer roster behind that board's table.
+     *
+     * Same permission as the board itself, and for the same reason: this is the
+     * aggregate view of everyone who has ever bought here, which is a different
+     * question from the till looking up the customer standing in front of it.
+     *
+     * Paged, searched and filtered in SQL. The response carries the four tab
+     * counts in its meta so the tabs can show totals without four more round
+     * trips, and the thresholds it classified with, so the screen labels a
+     * lapsed customer with the same number the server used.
+     */
+    public static function customerDirectory(): void
+    {
+        [$auth, $ctx] = self::enter();
+        Permissions::assert($ctx, $auth, 'reports.view');
+
+        $params = Http::listParams(['last_visit', 'spend', 'visits', 'name'], 'last_visit');
+        $window = Window::fromRequest($ctx, $auth);
+
+        $result = (new CustomerDirectory($window))->build([
+            'tab'    => (string) (Http::param('tab') ?? 'all'),
+            'q'      => (string) $params['q'],
+            'sort'   => (string) $params['sort'],
+            'order'  => (string) $params['order'],
+            'limit'  => (int) $params['limit'],
+            'offset' => (int) $params['offset'],
+        ]);
+
+        Http::list($result['rows'], $result['total'], (int) $params['limit'], (int) $params['offset'], [
+            'counts' => $result['counts'],
+            'basis'  => $result['basis'],
+            'rules'  => CustomerRules::describe(),
+            'window' => $window->describe(),
+            'contact' => [
+                'masked' => true,
+                'note'   => 'Mobile numbers are shown with only their last four digits. '
+                    . 'Look a customer up on the till for the full number, where the lookup is logged. '
+                    . 'POS stores no email address against a bill.',
+            ],
+        ]);
     }
 
     /** Cash, Shifts & Controls — a cashier sees their own drawer, a manager sees the outlet. */

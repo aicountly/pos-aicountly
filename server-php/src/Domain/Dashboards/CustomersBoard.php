@@ -39,14 +39,18 @@ final class CustomersBoard
     public function build(): array
     {
         $coverage = $this->coverage();
+        $kpis     = $this->kpis($coverage);
 
         return [
             'window'    => $this->win->describe(),
+            'rules'     => CustomerRules::describe(),
             'coverage'  => $coverage,
-            'kpis'      => $this->kpis($coverage),
+            'kpis'      => $kpis,
+            'comparison' => $this->comparison($kpis),
             'trend'     => $this->trend(),
             'recency'   => $this->recency(),
             'segments'  => $this->segments(),
+            'outlets'   => $this->outlets(),
             'combinations' => $this->combinations(),
             'loyalty'   => $this->loyalty(),
             'offers'    => $this->offers(),
@@ -77,14 +81,21 @@ final class CustomersBoard
 
         $bills = (int) ($row['bills'] ?? 0);
         $identified = (int) ($row['identified_bills'] ?? 0);
+        $net = (float) ($row['net'] ?? 0);
+        $identifiedNet = (float) ($row['identified_net'] ?? 0);
 
         return [
             'bills'            => $bills,
             'identified_bills' => $identified,
             'anonymous_bills'  => $bills - $identified,
             'identified_pc'    => $bills > 0 ? round($identified / $bills * 100, 1) : null,
-            'net'              => (float) ($row['net'] ?? 0),
-            'identified_net'   => (float) ($row['identified_net'] ?? 0),
+            'net'              => $net,
+            'identified_net'   => $identifiedNet,
+            // The revenue share, worked out here rather than in the browser:
+            // two authoritative sums divided in one place is one definition of
+            // "customer revenue", and every screen that shows it shows the same
+            // number.
+            'identified_net_pc' => $net > 0 ? round($identifiedNet / $net * 100, 1) : null,
         ];
     }
 
@@ -146,15 +157,24 @@ final class CustomersBoard
      */
     private function trend(): array
     {
-        $singleDay = $this->win->from === $this->win->to;
         [$where, $params] = $this->win->clause('c');
         [$where, $params] = $this->win->narrow($where, $params, 'c');
         $params['tz'] = $this->win->timezone;
         $params['fs_cmp'] = $this->win->ctx->cmpId;
 
-        $expr = $singleDay
-            ? "to_char(date_trunc('hour', c.created_at AT TIME ZONE :tz), 'HH24:00')"
-            : "to_char(date_trunc('day', c.created_at AT TIME ZONE :tz), 'YYYY-MM-DD')";
+        // The bucket follows the span. A year of trade plotted by day is 365
+        // points in a chart 640 units wide — a smear, not a trend — so anything
+        // past a couple of months is grouped by month instead.
+        $span = (int) (new \DateTimeImmutable($this->win->from))
+            ->diff(new \DateTimeImmutable($this->win->to))->days + 1;
+
+        $bucket = $this->win->from === $this->win->to ? 'hour' : ($span > 62 ? 'month' : 'day');
+
+        $expr = match ($bucket) {
+            'hour'  => "to_char(date_trunc('hour', c.created_at AT TIME ZONE :tz), 'HH24:00')",
+            'month' => "to_char(date_trunc('month', c.created_at AT TIME ZONE :tz), 'YYYY-MM')",
+            default => "to_char(date_trunc('day', c.created_at AT TIME ZONE :tz), 'YYYY-MM-DD')",
+        };
 
         $rows = Db::all(
             "WITH first_seen AS (
@@ -174,7 +194,7 @@ final class CustomersBoard
         );
 
         return [
-            'bucket' => $singleDay ? 'hour' : 'day',
+            'bucket' => $bucket,
             'points' => array_map(static fn (array $r): array => [
                 'bucket'          => (string) $r['bucket'],
                 'new_bills'       => (int) $r['new_bills'],
@@ -244,6 +264,9 @@ final class CustomersBoard
     {
         $params = ['cmp' => $this->win->ctx->cmpId];
 
+        $loyal  = CustomerRules::loyalSql();
+        $atRisk = CustomerRules::atRiskSql();
+
         $row = Db::first(
             "WITH history AS (
                  SELECT customer_account_id AS account_id,
@@ -256,10 +279,10 @@ final class CustomersBoard
              )
              SELECT COUNT(*) AS total,
                     COUNT(*) FILTER (WHERE visits = 1) AS one_time,
-                    COUNT(*) FILTER (WHERE visits >= 3 AND last_at >= NOW() - INTERVAL '60 days') AS loyal,
-                    COUNT(*) FILTER (WHERE visits >= 2 AND last_at <  NOW() - INTERVAL '60 days') AS at_risk,
-                    COALESCE(SUM(spend) FILTER (WHERE visits >= 3 AND last_at >= NOW() - INTERVAL '60 days'), 0) AS loyal_spend,
-                    COALESCE(SUM(spend) FILTER (WHERE visits >= 2 AND last_at <  NOW() - INTERVAL '60 days'), 0) AS at_risk_spend,
+                    COUNT(*) FILTER (WHERE {$loyal}) AS loyal,
+                    COUNT(*) FILTER (WHERE {$atRisk}) AS at_risk,
+                    COALESCE(SUM(spend) FILTER (WHERE {$loyal}), 0) AS loyal_spend,
+                    COALESCE(SUM(spend) FILTER (WHERE {$atRisk}), 0) AS at_risk_spend,
                     COALESCE(SUM(spend) FILTER (WHERE visits = 1), 0) AS one_time_spend
              FROM history",
             $params,
@@ -276,12 +299,15 @@ final class CustomersBoard
             'share_pc'   => null,
         ];
 
+        $days  = CustomerRules::INACTIVE_DAYS;
+        $least = CustomerRules::LOYAL_MIN_VISITS;
+
         $segments = [
             $segment('loyal', 'Regulars',
-                'Three or more bills on this POS, the most recent within 60 days.',
+                $least . ' or more bills on this POS, the most recent within ' . $days . ' days.',
                 (int) ($row['loyal'] ?? 0), (float) ($row['loyal_spend'] ?? 0)),
             $segment('at_risk', 'Slipping away',
-                'Two or more bills on this POS, but nothing in the last 60 days.',
+                'Two or more bills on this POS, but nothing in the last ' . $days . ' days.',
                 (int) ($row['at_risk'] ?? 0), (float) ($row['at_risk_spend'] ?? 0)),
             $segment('one_time', 'Bought once',
                 'Exactly one bill on this POS, ever.',
@@ -357,6 +383,143 @@ final class CustomersBoard
     }
 
     /**
+     * The same customer KPIs over the window before this one.
+     *
+     * Returned only when a comparison was actually asked for. Every board on
+     * this POS already accepts `compare=`, and Window has worked the bounds out
+     * since the first release — this board simply never used them, so its KPI
+     * cards had no movement to show. They do now, and when no comparison is
+     * selected this is null and the cards show no trend at all rather than a
+     * flat zero, which reads as "no change" and is a different claim.
+     *
+     * @param array<string, mixed> $current
+     * @return array<string, mixed>|null
+     */
+    private function comparison(array $current): ?array
+    {
+        $clause = $this->win->comparisonClause('c');
+        if ($clause === null) {
+            return null;
+        }
+
+        [$where, $params] = $clause;
+        [$where, $params] = $this->win->narrow($where, $params, 'c');
+
+        $row = Db::first(
+            "WITH identified AS (
+                 SELECT c.customer_account_id AS account_id,
+                        COUNT(*) AS bills,
+                        SUM(c.total_amount) AS net
+                 FROM pos_carts c
+                 WHERE {$where} AND c.status = 'COMPLETED' AND c.customer_account_id IS NOT NULL
+                 GROUP BY c.customer_account_id
+             ),
+             first_seen AS (
+                 SELECT customer_account_id AS account_id, MIN(created_at) AS first_at
+                 FROM pos_carts
+                 WHERE cmp_id = :fs_cmp AND status = 'COMPLETED' AND customer_account_id IS NOT NULL
+                 GROUP BY customer_account_id
+             )
+             SELECT COUNT(*) AS customers,
+                    COUNT(*) FILTER (WHERE f.first_at >= :cmp_from) AS new_customers,
+                    COUNT(*) FILTER (WHERE i.bills > 1)             AS repeat_in_window,
+                    COALESCE(SUM(i.net), 0)                         AS net,
+                    COALESCE(SUM(i.bills), 0)                       AS bills
+             FROM identified i
+             JOIN first_seen f ON f.account_id = i.account_id",
+            $params + ['fs_cmp' => $this->win->ctx->cmpId],
+        ) ?? [];
+
+        $customers = (int) ($row['customers'] ?? 0);
+        $bills     = (int) ($row['bills'] ?? 0);
+        $net       = (float) ($row['net'] ?? 0);
+
+        return [
+            'label'                   => $this->win->compareLabel,
+            'identified_customers'    => $customers,
+            'new_customers'           => (int) ($row['new_customers'] ?? 0),
+            'repeat_rate_pc'          => $customers > 0
+                ? round((int) ($row['repeat_in_window'] ?? 0) / $customers * 100, 1)
+                : null,
+            'identified_average_bill' => $bills > 0 ? round($net / $bills, 2) : null,
+            'identified_net'          => $net,
+        ];
+    }
+
+    /**
+     * Which outlets hold on to their customers.
+     *
+     * Counted per outlet rather than per till, because "does the Whitefield
+     * shop bring people back" is an outlet question. A customer who bought at
+     * two outlets is counted at both — they are a returning customer of both,
+     * and de-duplicating them to the larger one would flatter it.
+     *
+     * Every outlet in scope appears, including the ones with nothing in this
+     * window, so a quiet outlet reads as a zero rather than vanishing from the
+     * list.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function outlets(): array
+    {
+        [$where, $params] = $this->win->clause('c');
+        [$where, $params] = $this->win->narrow($where, $params, 'c');
+        $params['cmp'] = $this->win->ctx->cmpId;
+
+        $outletFilter = '';
+        if ($this->win->locationId !== null) {
+            $outletFilter = ' AND l.location_id = :only_loc';
+            $params['only_loc'] = $this->win->locationId;
+        }
+
+        $rows = Db::all(
+            "WITH per_customer AS (
+                 SELECT t.location_id,
+                        c.customer_account_id AS account_id,
+                        COUNT(*) AS bills,
+                        SUM(c.total_amount) AS net
+                 FROM pos_carts c
+                 JOIN pos_terminals t ON t.terminal_id = c.terminal_id
+                 WHERE {$where} AND c.status = 'COMPLETED' AND c.customer_account_id IS NOT NULL
+                 GROUP BY t.location_id, c.customer_account_id
+             )
+             SELECT l.location_id, l.location_code, l.display_name, l.pos_mode,
+                    COUNT(p.account_id) AS customers,
+                    COUNT(p.account_id) FILTER (WHERE p.bills > 1) AS repeat_customers,
+                    COALESCE(SUM(p.bills), 0) AS identified_bills,
+                    COALESCE(SUM(p.net), 0)   AS identified_net
+             FROM pos_location_profiles l
+             LEFT JOIN per_customer p ON p.location_id = l.location_id
+             WHERE l.cmp_id = :cmp AND l.is_active = TRUE{$outletFilter}
+             GROUP BY l.location_id, l.location_code, l.display_name, l.pos_mode
+             ORDER BY COUNT(p.account_id) DESC, l.location_code",
+            $params,
+        );
+
+        return array_map(static function (array $r): array {
+            $customers = (int) $r['customers'];
+            $repeat    = (int) $r['repeat_customers'];
+
+            return [
+                'location_id'      => (int) $r['location_id'],
+                'location_code'    => (string) $r['location_code'],
+                'display_name'     => $r['display_name'] === null || $r['display_name'] === ''
+                    ? (string) $r['location_code']
+                    : (string) $r['display_name'],
+                'pos_mode'         => (string) $r['pos_mode'],
+                'customers'        => $customers,
+                'repeat_customers' => $repeat,
+                // Null rather than 0% for an outlet that saw nobody: no
+                // identified customer means the rate has no denominator, and a
+                // bar sitting at zero would read as "they all left".
+                'repeat_rate_pc'   => $customers > 0 ? round($repeat / $customers * 100, 1) : null,
+                'identified_bills' => (int) $r['identified_bills'],
+                'identified_net'   => (float) $r['identified_net'],
+            ];
+        }, $rows);
+    }
+
+    /**
      * Loyalty, told straight.
      *
      * @return array<string, mixed>
@@ -414,7 +577,8 @@ final class CustomersBoard
                     'id'          => 'follow-up-at-risk',
                     'kind'        => 'rule',
                     'segment'     => $segment['key'],
-                    'title'       => $segment['customers'] . ' regulars have not been back in 60 days',
+                    'title'       => $segment['customers'] . ' regulars have not been back in '
+                        . CustomerRules::INACTIVE_DAYS . ' days',
                     'definition'  => $segment['definition'],
                     'explanation' => 'They bought at least twice and then stopped. Worth a look before the next print run.',
                     'supporting_customers' => $segment['customers'],
@@ -469,8 +633,9 @@ final class CustomersBoard
             ],
             'contact_details' => [
                 'visible' => Permissions::allows($this->win->ctx, $this->win->auth, 'reports.view'),
-                'note'    => 'Contact details are never returned to this board. Look a customer up on the till to see them, '
-                    . 'where the lookup is logged.',
+                'note'    => 'No contact detail is returned with a suggestion, and the customer roster shows a mobile '
+                    . 'with only its last four digits legible. The whole number is on the till, where looking one up '
+                    . 'is a logged action against a named customer.',
             ],
             'generated_at' => gmdate('c'),
         ];

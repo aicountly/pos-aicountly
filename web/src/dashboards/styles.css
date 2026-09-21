@@ -571,6 +571,29 @@
 .pos-chart__bar--muted { fill: #b9d9ad; }
 .pos-chart__point { fill: var(--pos-brand); }
 
+/*
+ * A second series that is a peer, not a comparison.
+ *
+ * New customers beside returning ones are two measures of the same importance,
+ * so this one gets its own hue and its own area rather than the grey dashed
+ * treatment that says "this is last week". It is still dashed — at a longer
+ * rhythm than the comparison line — because the rule at the top of this file
+ * holds: nothing here may depend on telling two hues apart.
+ */
+.pos-chart__line--secondary {
+  stroke: var(--pos-series-2, #2f74d0);
+  stroke-width: 2.5;
+  stroke-dasharray: 9 5;
+}
+
+.pos-chart__area--secondary { fill: rgba(47, 116, 208, 0.09); }
+.pos-chart__point--secondary { fill: var(--pos-series-2, #2f74d0); }
+
+.pos-legend .pos-legend__swatch--secondary {
+  background: repeating-linear-gradient(90deg, var(--pos-series-2, #2f74d0) 0 9px, transparent 9px 14px);
+}
+
+
 .pos-legend {
   display: flex;
   flex-wrap: wrap;

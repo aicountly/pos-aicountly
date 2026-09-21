@@ -52,6 +52,13 @@ Two drill-downs sit behind them, both paged server-side:
 |---|---|
 | `GET v1/cash-movements` | `reports.view`, `drawer.cash_io` or `shift.close` |
 | `GET v1/audit-log` | `reports.view` |
+| `GET v1/dashboards/customers/directory` | `reports.view` |
+
+The customer directory takes the same filter bar as the boards plus `tab`
+(`all`, `new`, `repeat`, `inactive`), `q`, `sort` (`last_visit`, `spend`,
+`visits`, `name`), `order`, `limit` and `offset`. Its `meta` carries the four tab
+counts, so the tabs show totals without four more round trips, and the
+thresholds it classified with, so the screen never hard-codes them.
 
 ## What decides whether a board is visible
 
@@ -140,6 +147,37 @@ two meanings.
 Every SUM runs in PostgreSQL over `NUMERIC(18,4)` columns, so the arithmetic is
 decimal. PHP sees a total only to put it in JSON, and the browser only to format
 it.
+
+### Who counts as a customer
+
+Every figure on Customers & Growth counts **identified bills only** — a
+`COMPLETED` cart carrying `customer_account_id`. Anonymous counter sales are
+excluded and counted separately, and the identified share is on the banner at
+the top of the board rather than in a footnote, because a 67% repeat rate over
+4% of bills and the same rate over 90% of bills are different facts.
+
+One class, `Domain\Dashboards\CustomerRules`, holds every threshold the board
+judges a customer by, and returns them to the browser on `board.rules` so the
+screen renders "60+ days" from the server's number rather than a second copy of
+it.
+
+| | |
+|---|---|
+| Lapsed | No bill for `INACTIVE_DAYS` (60), measured from today |
+| Regular | `LOYAL_MIN_VISITS` (3) or more bills, most recent within that window |
+| Slipping away | Two or more bills, none inside that window |
+| Bought once | Exactly one bill, ever |
+| New | Their first bill on this POS fell inside the chosen period |
+
+**Standing outranks the window.** New is the last rung of that ladder, not the
+first. Checked first, it looked right until someone widened the range: over a
+year every customer's first bill falls inside it, so a twelve-visit regular and
+a customer lapsed for two hundred days both came back "New" and the column said
+nothing. New now only refines *Bought once*.
+
+These are product defaults rather than a per-shop setting. A pharmacy's idea of
+lapsed is not a fine-dining restaurant's, and when that setting exists these
+read from it.
 
 ### Expected cash
 
@@ -340,6 +378,19 @@ idempotent under concurrent use, and a reversal path a return triggers.
 
 **No offer performance.** Nothing records that a bill resulted from an offer, so
 attribution cannot be computed.
+
+**No customer contact list.** The roster shows a mobile with only its last four
+digits legible, and no email at all — POS stores none against a bill. That is
+enough for a manager to recognise the customer they are looking at and useless
+as a marketing list, which is the line this product draws: the whole number is
+on the till, where looking one up is a logged action against a named customer.
+There is no export, no bulk selection and no message sender on this board,
+because there is no endpoint behind any of them.
+
+**No customer profile.** POS does not own the customer record — Books does. The
+name on a row is the most recent non-empty name a cashier typed on a receipt,
+not a master copy, and there is no tag, note or bill-by-bill history against a
+customer in this product.
 
 **No AI suggestions.** POS has no model integration configured. Every item on
 every brief is a threshold crossing computed from POS' own rows, and each is

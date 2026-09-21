@@ -482,8 +482,41 @@ export interface RestaurantBoard {
 // Customers & Growth
 // ---------------------------------------------------------------------------
 
+export interface CustomerRules {
+  inactive_days: number
+  loyal_min_visits: number
+  repeat_min_visits: number
+  note: string
+}
+
+/** The same customer KPIs over the previous window. Null unless one was asked for. */
+export interface CustomersComparison {
+  label: string | null
+  identified_customers: number
+  new_customers: number
+  repeat_rate_pc: number | null
+  identified_average_bill: number | null
+  identified_net: number
+}
+
+export interface CustomerOutlet {
+  location_id: number
+  location_code: string
+  display_name: string
+  pos_mode: string
+  customers: number
+  repeat_customers: number
+  /** Null where the outlet saw no identified customer: the rate has no denominator. */
+  repeat_rate_pc: number | null
+  identified_bills: number
+  identified_net: number
+}
+
 export interface CustomersBoard {
   window: WindowMeta
+  rules: CustomerRules
+  comparison: CustomersComparison | null
+  outlets: CustomerOutlet[]
   coverage: {
     bills: number
     identified_bills: number
@@ -491,6 +524,8 @@ export interface CustomersBoard {
     identified_pc: number | null
     net: number
     identified_net: number
+    /** Identified revenue as a share of everything the tills took. Null with no takings. */
+    identified_net_pc: number | null
   }
   kpis: {
     identified_customers: number
@@ -501,7 +536,8 @@ export interface CustomersBoard {
     identified_pc: number | null
   }
   trend: {
-    bucket: 'hour' | 'day'
+    /** Follows the span: a day is hourly, a quarter or more is monthly. */
+    bucket: 'hour' | 'day' | 'month'
     points: Array<{ bucket: string; new_bills: number; returning_bills: number }>
   }
   recency: {
@@ -545,6 +581,49 @@ export interface CustomersBoard {
     generated_at: string
   }
   basis: string
+}
+
+/**
+ * One row of the customer roster.
+ *
+ * Deliberately not a "customer record": POS does not own one. This is what the
+ * tills know about an account — how often it bought here, what it spent here,
+ * and the name last typed on a receipt for it.
+ */
+export type CustomerType = 'new' | 'loyal' | 'regular' | 'at_risk' | 'one_time'
+
+export interface CustomerSummary {
+  /** Books' account for this customer. A reference, shown as one. */
+  account_id: number
+  /** Null where no bill ever carried a name. The screen says "Unnamed customer". */
+  name: string | null
+  /** Last four digits legible, the rest masked. Null where POS holds no number. */
+  mobile_masked: string | null
+  /** Always null: POS stores no email address against a bill. */
+  email: string | null
+  visits: number
+  spend: number
+  average_bill: number | null
+  window_visits: number
+  window_spend: number
+  first_at: string | null
+  last_at: string | null
+  outlet_id: number | null
+  outlet_name: string | null
+  customer_type: CustomerType
+}
+
+export type CustomerTab = 'all' | 'new' | 'repeat' | 'inactive'
+
+export interface CustomerDirectoryMeta {
+  total: number
+  limit: number
+  offset: number
+  counts: Record<CustomerTab, number>
+  basis: string
+  rules: CustomerRules
+  window: WindowMeta
+  contact: { masked: boolean; note: string }
 }
 
 // ---------------------------------------------------------------------------
