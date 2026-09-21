@@ -31,6 +31,7 @@ use Aicountly\Api\Domain\Dashboards\RestaurantBoard;
 use Aicountly\Api\Domain\Dashboards\RetailBoard;
 use Aicountly\Api\Domain\Dashboards\Tenders;
 use Aicountly\Api\Domain\Dashboards\Window;
+use Aicountly\Api\Domain\Shift\ShiftReportBoard;
 use Aicountly\Api\Domain\CheckoutService;
 use Aicountly\Api\Domain\KotService;
 use Aicountly\Api\Domain\MenuService;
@@ -145,6 +146,33 @@ function cashierAuth(): Auth
     }
 
     return $auth;
+}
+
+/**
+ * A ShiftReportBoard, built the way a request would build one.
+ *
+ * The same reasoning as dashboardWindow: the board resolves its own shift from
+ * the query string, so the tests set $_GET and let the real resolution,
+ * validation and permission narrowing run. A hand-built board would test a
+ * constructor nobody calls.
+ *
+ * @param array<string, string|int> $query
+ */
+function shiftBoard(Context $ctx, Auth $auth, array $query = []): ShiftReportBoard
+{
+    $previous = $_GET;
+    $_GET = array_map(static fn ($v): string => (string) $v, $query);
+    $r = new \ReflectionClass(Http::class);
+    $bodyProp = $r->getProperty('body');
+    $bodyProp->setAccessible(true);
+    $bodyProp->setValue(null, []);
+
+    try {
+        return ShiftReportBoard::fromRequest($ctx, $auth);
+    } finally {
+        $_GET = $previous;
+        $bodyProp->setValue(null, null);
+    }
 }
 
 /**
@@ -1691,6 +1719,309 @@ check('an outlet id belonging to another company is a 404, not an empty board', 
         'does not exist in this company',
         'a foreign outlet id is refused rather than silently returning nothing',
     );
+});
+
+echo "\nShift report\n";
+
+check('the shift report counts this shift only, and zero is a figure rather than a gap', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+
+    // An earlier shift on the same till, closed. Its takings must not leak.
+    $earlier = openShift($ctx, $auth, $terminalId, 100.0);
+    $earlierCart = seedCart($ctx, $auth, $terminalId, $earlier);
+    (new CheckoutService($ctx, $auth))->checkout((int) $earlierCart['cart_id'], [
+        'payments' => [['payment_mode' => 'cash', 'amount' => (float) $earlierCart['total_amount']]],
+    ]);
+    (new RegisterService($ctx, $auth))->close($earlier, [
+        'counted_cash' => 100.0 + (float) $earlierCart['total_amount'],
+    ]);
+
+    $sessionId = openShift($ctx, $auth, $terminalId, 500.0);
+    $paid = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CheckoutService($ctx, $auth))->checkout((int) $paid['cart_id'], [
+        'payments' => [['payment_mode' => 'cash', 'amount' => (float) $paid['total_amount']]],
+    ]);
+    $voided = seedCart($ctx, $auth, $terminalId, $sessionId);
+    (new CartService($ctx, $auth))->void((int) $voided['cart_id'], ['reason' => 'Customer changed their mind']);
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+
+    assertSame($sessionId, $board['shift']['session_id'], 'the shift asked for');
+    assertSame(1, $board['metrics']['bills'], 'one completed bill on THIS shift');
+    assertSame(round((float) $paid['total_amount'], 4), round($board['metrics']['net_sales'], 4), 'net sales is this shift\'s bill');
+    assertSame(1, $board['metrics']['voids'], 'the void is counted as an exception, not a sale');
+    // Zero is a value. A shift that discounted nothing reads 0.00, never null.
+    assertSame(0.0, $board['metrics']['discounts'], 'no discount given is zero, not missing');
+    assertSame(0.0, $board['metrics']['refunds'], 'no refund is zero, not missing');
+    assertSame('open', $board['shift']['state'], 'the till is still open');
+});
+
+check('an uncounted drawer has no variance, rather than a variance of zero', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 2000.0);
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+
+    assertSame(2000.0, $board['cash']['expected'], 'the float is what the drawer should hold');
+    assertSame(null, $board['cash']['counted'], 'nobody has counted it');
+    assertSame(null, $board['cash']['variance'], 'so there is no variance — not a zero one');
+    assertSame('uncounted', $board['cash']['variance_state'], 'and it says so');
+    assertSame(false, $board['shift']['reconciled'], 'an open shift is not reconciled');
+});
+
+check('the variance is judged against the tolerance this shop set, not a constant', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    Db::insert('pos_settings', ['cmp_id' => $ctx->cmpId, 'cash_variance_tolerance' => 100], 'cmp_id');
+
+    $sessionId = openShift($ctx, $auth, $terminalId, 2000.0);
+    (new RegisterService($ctx, $auth))->close($sessionId, [
+        'counted_cash' => 1950, 'variance_reason' => 'Short at handover',
+    ]);
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+    assertSame(-50.0, $board['cash']['variance'], 'fifty short');
+    assertSame('within_tolerance', $board['cash']['variance_state'], 'and this shop allows a hundred');
+    assertSame('reconciled', $board['shift']['state'], 'so the shift reads as reconciled');
+
+    // The same drawer, at a shop that allows nothing.
+    Db::update('pos_settings', ['cash_variance_tolerance' => 0], ['cmp_id' => $ctx->cmpId]);
+    $strict = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+    assertSame('out_of_tolerance', $strict['cash']['variance_state'], 'the same fifty is now out of tolerance');
+    assertSame('variance', $strict['shift']['state'], 'and the shift says a variance was found');
+});
+
+check('the denomination sheet is kept with the count that produced it', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 2000.0);
+
+    (new RegisterService($ctx, $auth))->close($sessionId, [
+        'counted_cash' => 2000,
+        'denominations' => [
+            ['denomination' => 500, 'quantity' => 3],
+            ['denomination' => 200, 'quantity' => 2],
+            ['denomination' => 100, 'quantity' => 1],
+            ['denomination' => 50,  'quantity' => 0],
+        ],
+    ]);
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+    $sheet = $board['denominations'];
+
+    assertSame(true, $sheet['has_sheet'], 'the sheet came back');
+    assertSame(2000.0, $sheet['counted_total'], 'and it adds up to the count');
+    assertSame(0.0, $sheet['variance'], 'which balanced the drawer');
+
+    $byFace = [];
+    foreach ($sheet['rows'] as $row) {
+        $byFace[(string) $row['denomination']] = $row['quantity'];
+    }
+    assertSame(3, $byFace['500'], 'three five-hundreds');
+    assertSame(1, $byFace['100'], 'one hundred');
+    // A denomination nobody counted is null, never zero: "we did not count any"
+    // and "there were none" are different claims about a drawer.
+    assertSame(null, $byFace['20'], 'an uncounted denomination is null, not zero');
+});
+
+check('a count that does not add up to the figure beside it is refused', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 2000.0);
+
+    assertThrows(
+        static fn () => (new RegisterService($ctx, $auth))->close($sessionId, [
+            'counted_cash' => 2000,
+            'denominations' => [['denomination' => 500, 'quantity' => 2]],
+            'variance_reason' => 'never reached',
+        ]),
+        'add up to',
+        'two figures for one drawer is refused rather than silently preferred',
+    );
+
+    assertSame('OPEN', Db::scalar('SELECT status FROM pos_register_sessions WHERE session_id = :s', ['s' => $sessionId]), 'and the shift stays open');
+});
+
+check('the comparison is the previous shift on the same till', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+
+    $first = openShift($ctx, $auth, $terminalId, 0.0);
+    $firstCart = seedCart($ctx, $auth, $terminalId, $first);
+    (new CheckoutService($ctx, $auth))->checkout((int) $firstCart['cart_id'], [
+        'payments' => [['payment_mode' => 'cash', 'amount' => (float) $firstCart['total_amount']]],
+    ]);
+    (new RegisterService($ctx, $auth))->close($first, ['counted_cash' => (float) $firstCart['total_amount']]);
+
+    $second = openShift($ctx, $auth, $terminalId, 0.0);
+    foreach ([1, 2] as $_) {
+        $cart = seedCart($ctx, $auth, $terminalId, $second);
+        (new CheckoutService($ctx, $auth))->checkout((int) $cart['cart_id'], [
+            'payments' => [['payment_mode' => 'cash', 'amount' => (float) $cart['total_amount']]],
+        ]);
+    }
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $second])->build();
+    assertSame($first, $board['comparison']['session_id'], 'it compares against the shift before it');
+    assertSame(1, $board['comparison']['metrics']['bills'], 'which took one bill');
+    assertSame(100.0, $board['comparison']['bills_pct'], 'two bills against one is up a hundred per cent');
+
+    // The first shift has nothing before it, and does not invent a comparison.
+    $firstBoard = shiftBoard($ctx, $auth, ['session_id' => $first])->build();
+    assertSame(null, $firstBoard['comparison'], 'the first shift compares against nothing');
+});
+
+check('the trail shows a no-sale drawer open once, not once per table that recorded it', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 500.0);
+
+    // One no-sale writes a drawer event, an approval event AND an audit row.
+    (new RegisterService($ctx, $auth))->drawerEvent($sessionId, [
+        'event_kind' => 'no_sale_open', 'reason' => 'Change for a customer',
+    ]);
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId]);
+    $events = $board->events($sessionId, null, 50, 0);
+
+    $noSales = array_values(array_filter(
+        $events['items'],
+        static fn (array $e): bool => $e['title'] === 'No-sale drawer open',
+    ));
+    assertSame(1, count($noSales), 'one fact, one row');
+    assertSame('drawer', $noSales[0]['category'], 'filed under the drawer');
+    assertSame('review', $noSales[0]['severity'], 'and worth a look');
+
+    // Opening the shift is in there exactly once too.
+    $opens = array_values(array_filter(
+        $events['items'],
+        static fn (array $e): bool => $e['category'] === 'shift',
+    ));
+    assertSame(1, count($opens), 'the shift opened once');
+
+    $filtered = $board->events($sessionId, 'drawer', 50, 0);
+    assertSame(1, $filtered['total'], 'filtering to the drawer finds the no-sale');
+});
+
+check('every cash sale is kept out of the trail, so six movements are not buried under four hundred', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    $sessionId = openShift($ctx, $auth, $terminalId, 500.0);
+
+    foreach ([1, 2, 3] as $_) {
+        $cart = seedCart($ctx, $auth, $terminalId, $sessionId);
+        (new CheckoutService($ctx, $auth))->checkout((int) $cart['cart_id'], [
+            'payments' => [['payment_mode' => 'cash', 'amount' => (float) $cart['total_amount']]],
+        ]);
+    }
+
+    $tenders = (int) Db::scalar(
+        "SELECT COUNT(*) FROM pos_cash_drawer_events WHERE session_id = :s AND event_kind = 'sale_tender'",
+        ['s' => $sessionId],
+    );
+    assertTrue($tenders >= 3, 'the sales did reach the drawer');
+
+    $events = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->events($sessionId, null, 50, 0);
+    foreach ($events['items'] as $event) {
+        assertTrue($event['code'] !== 'sale_tender', 'no sale tender in the trail');
+    }
+    // They are still in the money: the tender mix and the cash summary count them.
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+    assertSame(3, $board['metrics']['bills'], 'and the three bills are still counted');
+    assertTrue($board['cash']['cash_sales'] > 0, 'and the cash is still in the drawer sum');
+});
+
+check('a cashier reads their own shift and is refused somebody else\'s', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    Permissions::seed($ctx);
+
+    $cashier = cashierAuth();
+    $profileId = (int) Db::scalar(
+        'SELECT profile_id FROM pos_permission_profiles WHERE cmp_id = :cmp AND profile_code = :code',
+        ['cmp' => $ctx->cmpId, 'code' => 'cashier'],
+    );
+    Db::insert('pos_permission_assignments', [
+        'cmp_id' => $ctx->cmpId, 'user_uuid' => $cashier->uuid, 'profile_id' => $profileId,
+    ], 'assignment_id');
+
+    $managersShift = openShift($ctx, $auth, $terminalId, 3000.0);
+    (new RegisterService($ctx, $auth))->close($managersShift, ['counted_cash' => 3000]);
+    $theirShift = openShift($ctx, $cashier, $terminalId, 250.0);
+
+    $theirs = shiftBoard($ctx, $cashier, ['session_id' => $theirShift])->build();
+    assertSame($theirShift, $theirs['shift']['session_id'], 'their own shift opens');
+    assertSame(1, count($theirs['context']['shifts']), 'and the selector offers only theirs');
+
+    assertThrows(
+        static fn () => shiftBoard($ctx, $cashier, ['session_id' => $managersShift]),
+        'another cashier',
+        'a shift belonging to someone else is refused, not quietly emptied',
+    );
+
+    // The manager sees both in the selector.
+    $managers = shiftBoard($ctx, $auth, ['session_id' => $managersShift])->build();
+    assertSame(2, count($managers['context']['shifts']), 'the manager sees both shifts');
+});
+
+check('a suspicious-activity finding names the rule that produced it', function () use ($ctx, $auth) {
+    resetDatabase();
+    [, $terminalId] = seedOutlet($ctx);
+    Db::insert('pos_settings', ['cmp_id' => $ctx->cmpId, 'cash_variance_tolerance' => 0], 'cmp_id');
+
+    $sessionId = openShift($ctx, $auth, $terminalId, 1000.0);
+    (new RegisterService($ctx, $auth))->close($sessionId, [
+        'counted_cash' => 900, 'variance_reason' => 'Unexplained',
+    ]);
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+    $found = $board['risk']['suspicious'];
+
+    assertSame('rule', $found['kind'], 'rule-based, and labelled as such');
+    assertTrue(count($found['items']) >= 1, 'the variance rule fired');
+    foreach ($found['items'] as $item) {
+        assertTrue($item['rule'] !== '', 'every finding states the rule behind it');
+    }
+
+    $tiles = [];
+    foreach ($board['risk']['tiles'] as $tile) {
+        $tiles[$tile['kind']] = $tile;
+    }
+    assertSame('danger', $tiles['suspicious']['tone'], 'and the tile says so');
+    // A tile with nothing on it is not red.
+    assertSame('success', $tiles['voids']['tone'], 'no voids is not an alarm');
+    assertSame(0, $tiles['voids']['count'], 'and reads zero');
+});
+
+check('a shift that sold nothing still reports its drawer, and the outlet decides the day', function () use ($ctx, $auth) {
+    resetDatabase();
+    [$locationId, $terminalId] = seedOutlet($ctx);
+    Db::update('pos_location_profiles', [
+        'trading_timezone' => 'Asia/Kolkata', 'day_start_minutes' => 360,
+    ], ['location_id' => $locationId, 'cmp_id' => $ctx->cmpId]);
+
+    $sessionId = openShift($ctx, $auth, $terminalId, 750.0);
+    // A shift opened at 1am local belongs to the previous business day.
+    Db::run(
+        "UPDATE pos_register_sessions SET opened_at = ((DATE '2026-05-27' + TIME '01:00') AT TIME ZONE 'Asia/Kolkata') WHERE session_id = :s",
+        ['s' => $sessionId],
+    );
+
+    $board = shiftBoard($ctx, $auth, ['session_id' => $sessionId])->build();
+    assertSame('2026-05-26', $board['shift']['date'], 'a 1am shift belongs to the night before');
+    assertSame(0, $board['metrics']['bills'], 'it sold nothing');
+    assertSame(750.0, $board['cash']['expected'], 'and the float is still real');
+    assertSame(0, $board['channels']['total_orders'], 'no channels');
+    assertSame([], $board['payment_mix'], 'no tenders');
+
+    // Asked for by date rather than by id, it is still the shift that is found.
+    $byDate = shiftBoard($ctx, $auth, ['location_id' => $locationId, 'date' => '2026-05-26'])->build();
+    assertSame($sessionId, $byDate['shift']['session_id'], 'and the business date finds it');
+
+    $wrongDay = shiftBoard($ctx, $auth, ['location_id' => $locationId, 'date' => '2026-05-27'])->build();
+    assertSame(null, $wrongDay['shift'], 'the next day has no shift, and says so rather than erroring');
 });
 
 echo "\nData ownership (release-blocking)\n";
